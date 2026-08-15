@@ -1,0 +1,14 @@
+﻿# The published record is verified BYTE FOR BYTE: CHAIN.jsonl carries the
+# sha256 of each snapshot as it sits on disk. Git on Windows rewrites LF to
+# CRLF on checkout, which changes those bytes and makes verification fail on a
+# record that is perfectly intact -- the worst possible false alarm for a
+# document whose entire purpose is being checkable.
+#
+# So: normalise everything to LF, and mark the record files -text so git never
+# touches them at all. A clone must be byte-identical on every platform.
+* text=auto eol=lf
+
+*.json   -text
+*.jsonl  -text
+*.csv    -text
+*.ots    -text
