@@ -414,7 +414,8 @@ def main() -> None:
                       "trades": f"books/{BOOK}/trades.csv",
                       "snapshots": f"books/{BOOK}/snapshots/"},
         }],
-    }, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    }, indent=2, sort_keys=True, default=str) + "\n",
+        encoding="utf-8", newline="\n")
 
     log(f"  NAV {nav[-1].equity:,.2f}  ({cum * 100:+.4f}%)  "
         f"{len(nav) - 1} sessions  {len(norm)} trades")
