@@ -1,0 +1,21 @@
+{
+  "_readme": [
+    "Operator corrections to the broker's grouping. This file is committed and",
+    "hash-chained: an unpublished correction is indistinguishable from editing",
+    "the record, so every one of these is visible to anyone reading it.",
+    "",
+    "  merge:   [[trade_id, trade_id, ...], ...]   several trades -> one",
+    "  split:   [trade_id, ...]                    one trade -> one per leg",
+    "  exclude: [trade_id, ...]                    drop entirely",
+    "",
+    "The four trades currently flagged for review are left UNMERGED, which is",
+    "the honest default: the machine cannot tell a deliberate scale-in from two",
+    "separate re-entries, and neither can it guess. Decide, then record it here.",
+    "",
+    "  20260811-1142244626 + 20260811-1142244625   1 NQ long, 2 min apart",
+    "  20260813-1144963605 + 20260813-1144963623   1 NQ short, 55 sec apart"
+  ],
+  "merge": [],
+  "split": [],
+  "exclude": []
+}

@@ -1,0 +1,9 @@
+# Vercel only needs the rendered site and the config that points at it.
+# Everything else is the machinery that produces it and belongs in git, not in
+# a deployment upload.
+bese/
+data/
+*.py
+*.md
+.gitignore
+__pycache__/

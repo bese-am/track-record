@@ -1,0 +1,113 @@
+:root{color-scheme:light dark;
+--bg:#ffffff;--bg-subtle:#fafafa;--fg:#111318;--fg-muted:#5b6270;--fg-faint:#8b93a1;
+--hairline:#ececf0;--up:#10814a;--down:#c0392f;--accent:#1b3a6b;--bench:#9aa3b2;
+--warn-bg:#f6f6f7;--warn-fg:#3f4450}
+@media(prefers-color-scheme:dark){:root{
+--bg:#0d0f12;--bg-subtle:#121519;--fg:#eef1f5;--fg-muted:#a2abba;--fg-faint:#6f7889;
+--hairline:#23272e;--up:#3ddc97;--down:#ff7a6e;--accent:#9dc0f5;--bench:#616b7c;
+--warn-bg:#16181c;--warn-fg:#c7cdd8}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+font:14px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;
+-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+a{color:inherit;text-decoration:none;border-bottom:1px solid var(--hairline)}
+a:hover{border-bottom-color:var(--fg-muted)}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+
+.top{border-bottom:1px solid var(--hairline);background:var(--bg);
+position:sticky;top:0;z-index:5}
+.top .in{max-width:1000px;margin:0 auto;padding:0 28px;display:flex;
+align-items:center;gap:28px;height:58px}
+.brand{font-size:14.5px;font-weight:600;letter-spacing:-.01em;border:0}
+.brand span{color:var(--fg-faint);font-weight:400}
+.top nav{margin-left:auto;display:flex;gap:24px}
+.top nav a{font-size:12.5px;color:var(--fg-muted);border:0;padding:3px 0;
+border-bottom:1.5px solid transparent}
+.top nav a:hover{color:var(--fg)}
+.top nav a.on{color:var(--fg);border-bottom-color:var(--fg)}
+
+.wrap{max-width:1000px;margin:0 auto;padding:44px 28px 80px}
+.eyebrow{font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+color:var(--fg-faint);margin:0}
+h1{font-size:29px;font-weight:600;letter-spacing:-.024em;line-height:1.12;
+margin:.4rem 0 .35rem}
+.lede{color:var(--fg-muted);font-size:14px;margin:0;max-width:62ch}
+
+/* Two-column section: a heading rail, then the content. One hairline above and
+   no box around it. Every block aligns to the same two vertical rules. */
+section.blk{display:grid;grid-template-columns:180px 1fr;gap:0 40px;
+margin-top:44px;padding-top:26px;border-top:1px solid var(--hairline)}
+section.blk.first{border-top:0;margin-top:34px;padding-top:0}
+section.blk>.rail h2{font-size:13.5px;font-weight:600;letter-spacing:-.01em;margin:0}
+section.blk>.rail .note{margin-top:9px;font-size:11.5px;color:var(--fg-muted);
+line-height:1.6}
+section.blk>.body{min-width:0}
+@media(max-width:800px){section.blk{grid-template-columns:1fr;gap:14px}}
+
+/* KPI: label, big number, note. No border, no ground. */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:30px 26px}
+@media(max-width:800px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.kpi .k{font-size:11px;color:var(--fg-faint)}
+.kpi .v{margin-top:7px;font-size:27px;font-weight:600;letter-spacing:-.025em;
+line-height:1;font-variant-numeric:tabular-nums}
+.kpi .n{margin-top:7px;font-size:12px;color:var(--fg-faint)}
+
+.chart{width:100%;height:auto;display:block;overflow:visible}
+.ax{fill:var(--fg-faint);font-size:10.5px;font-variant-numeric:tabular-nums}
+.zero{stroke:var(--hairline);stroke-width:1}
+.line{fill:none;stroke:var(--accent);stroke-width:1.6;stroke-linejoin:round;
+stroke-linecap:round}
+.mark{fill:var(--accent)}
+.focus{fill:var(--accent)}
+.cross{stroke:var(--hairline);stroke-width:1}
+.hit{fill:transparent;cursor:crosshair}
+.bar.up{fill:var(--up)}.bar.down{fill:var(--down)}
+.val{font-size:10.5px;font-weight:500;font-variant-numeric:tabular-nums;
+fill:var(--fg-faint)}
+.val.up{fill:var(--up)}.val.down{fill:var(--down)}
+.dd-fill{fill:var(--down);fill-opacity:.10}
+.dd-line{fill:none;stroke:var(--down);stroke-width:1.4;stroke-linejoin:round}
+
+.ledger{display:grid;grid-template-columns:repeat(2,1fr);gap:2px 44px}
+@media(max-width:800px){.ledger{grid-template-columns:1fr}}
+.ledger h3{font-size:10px;letter-spacing:.07em;text-transform:uppercase;
+color:var(--fg-faint);font-weight:600;margin:18px 0 4px}
+.row{display:flex;align-items:baseline;gap:14px;padding:7px 0;
+border-bottom:1px solid var(--hairline)}
+.row dt{font-size:12.5px;color:var(--fg-muted)}
+.row dt small{color:var(--fg-faint);font-size:11px}
+.row dd{margin:0 0 0 auto;text-align:right;white-space:nowrap;
+font-size:13px;font-variant-numeric:tabular-nums}
+.held-inline{font-size:11.5px;color:var(--fg-faint)}
+.up{color:var(--up)}.down{color:var(--down)}
+svg .up,svg .down{color:inherit}
+
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;font-weight:600;font-size:10px;letter-spacing:.07em;
+text-transform:uppercase;color:var(--fg-faint);padding:0 10px 7px 0;
+border-bottom:1px solid var(--hairline);white-space:nowrap}
+td{padding:7px 10px 7px 0;border-bottom:1px solid var(--hairline);
+vertical-align:baseline}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+td.dim{color:var(--fg-faint)}td.strong{font-weight:600}
+tr.merged td{background:var(--bg-subtle)}
+.tag{font-size:10px;color:var(--fg-faint);white-space:nowrap;margin-right:6px}
+/* A withheld statistic is not a warning, it is an absence: set apart by ground
+   and weight, never by hue. */
+.notice{background:var(--warn-bg);color:var(--warn-fg);padding:11px 14px;
+font-size:12.5px;line-height:1.6;margin:18px 0 0}
+.prose p{color:var(--fg-muted);font-size:13px;max-width:72ch;margin:0 0 11px}
+.prose p:last-child{margin-bottom:0}
+.prose b,.prose strong{color:var(--fg)}
+pre{background:var(--bg-subtle);padding:13px 15px;overflow-x:auto;
+font-size:11px;line-height:1.55;
+font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin:0 0 11px}
+.empty{color:var(--fg-faint);font-size:12.5px;padding:16px 0}
+.foot{border-top:1px solid var(--hairline);margin-top:52px;padding:22px 0 0;
+font-size:11px;color:var(--fg-faint);max-width:82ch;line-height:1.65}
+.foot p{margin:0 0 8px}
+.tip{position:fixed;pointer-events:none;opacity:0;transition:opacity .1s;
+background:var(--bg);border:1px solid var(--hairline);padding:8px 11px;
+font-size:12px;z-index:9}
+.tip b{display:block;font-size:10.5px;color:var(--fg-faint);font-weight:400;
+margin-bottom:3px}

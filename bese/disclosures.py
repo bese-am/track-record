@@ -1,0 +1,107 @@
+"""The disclosures, stamped into every record — not merely rendered on a page.
+
+Ordered by how much each should change how the record is read. RVB's set is
+about paper accounts; Besë's is about nominal capital, normalised exposure and
+a constructed NAV. The structure — id, severity, title, body — is theirs.
+"""
+
+from __future__ import annotations
+
+DISCLOSURES: list[dict] = [
+    {
+        "id": "nominal_capital",
+        "severity": "critical",
+        "title_en": "Nominal capital, not assets under management",
+        "body_en": (
+            "$100,000 is a stated normalisation base, chosen so that results are "
+            "comparable over time and against other records. It is not client "
+            "money, not firm capital, and nothing here is managed on behalf of "
+            "anyone. Trading is done through a proprietary-trading firm "
+            "evaluation and funded-account programme; a prop firm's advertised "
+            "account size is a risk limit set by that firm, not capital under "
+            "management, and it is not treated as such anywhere in this record."),
+    },
+    {
+        "id": "not_advice",
+        "severity": "critical",
+        "title_en": "Past performance is not indicative of future results",
+        "body_en": (
+            "Nothing here is investment advice, an offer, or a solicitation to "
+            "buy or sell any financial instrument. Futures trading carries "
+            "substantial risk of loss."),
+    },
+    {
+        "id": "constructed_nav",
+        "severity": "important",
+        "title_en": "NAV is constructed from broker records, not read from an account",
+        "body_en": (
+            "The fills are exact: they come from the broker's and the firm's own "
+            "completed-trade records, including the commission actually charged. "
+            "The NAV series is not read from any account balance — it is computed "
+            "from those fills by published code. This is a weaker claim than "
+            "quoting a broker's equity endpoint, and it is stated plainly rather "
+            "than glossed. What makes it checkable is that the calculation is "
+            "open, the inputs are archived, and every session is hash-chained."),
+    },
+    {
+        "id": "normalised_exposure",
+        "severity": "important",
+        "title_en": "Returns are normalised to 1 NQ-equivalent exposure",
+        "body_en": (
+            "Every trade is scaled to one NQ-equivalent of exposure (NQ $20 per "
+            "index point, MNQ $2, so ten micros equal one E-mini) and the "
+            "resulting standardised profit and loss is applied to the nominal "
+            "base. Costs are deducted before that scaling, which means a micro "
+            "correctly carries its higher cost per unit of risk. These are not "
+            "the realised returns of any individual account, and exposure does "
+            "not compound with equity: the strategy is constant-notional, while "
+            "the return series compounds exactly."),
+    },
+    {
+        "id": "strategy_not_account",
+        "severity": "important",
+        "title_en": "This is a record of a strategy, not of an account",
+        "body_en": (
+            "Individual proprietary-firm accounts begin, end, and are replaced; "
+            "an account that breaches a firm rule is closed and a new one may be "
+            "opened. Because this series is built from trades rather than from "
+            "account equity, it is continuous by construction and no account "
+            "event resets it. Where one trade is copied across several accounts "
+            "it is counted once — copying does not multiply the strategy's "
+            "performance."),
+    },
+    {
+        "id": "short_history",
+        "severity": "important",
+        "title_en": "Annualised statistics are withheld until there is enough history",
+        "body_en": (
+            "Sharpe, Sortino, Calmar, CAGR, volatility, maximum drawdown, VaR, "
+            "skew, kurtosis and win rate are suppressed until the book has at "
+            "least 60 sessions. On a handful of sessions these are not imprecise "
+            "estimates, they are meaningless ones. Cumulative return, the equity "
+            "curve, and the best and worst session are published from the first "
+            "day, because those are statements of what happened rather than "
+            "estimates of anything."),
+    },
+    {
+        "id": "single_source",
+        "severity": "note",
+        "title_en": "One account is the source; the others follow it",
+        "body_en": (
+            "Trades are placed on a single leader account and copied to the "
+            "others. The record is built from the leader's completed-trade "
+            "export, so a copy that filled at a different price, filled partially "
+            "or failed to fill is not reflected here. The published series is the "
+            "strategy as traded on the leader, which is the thing being measured."),
+    },
+    {
+        "id": "not_gips",
+        "severity": "note",
+        "title_en": "GIPS-informed, not GIPS-compliant",
+        "body_en": (
+            "Returns are time-weighted; with no external cash flows this reduces "
+            "to compounding daily NAV. The presentation is informed by GIPS "
+            "practice but makes NO claim of GIPS compliance, which requires "
+            "third-party verification that has not been performed."),
+    },
+]

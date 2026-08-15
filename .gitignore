@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+
+# The inbox is a staging area; the archive is the operator's own copy of the
+# raw broker and firm exports. Neither is published.
+#
+# The archive stays OUT of the public repository on purpose. It carries the
+# firm's own account identifier in the clear, and a track record is a document
+# strangers are invited to read closely. Everything a stranger needs to check
+# the record — nav.csv, trades.csv, the metrics, the snapshots, the chain — is
+# published; the raw exports behind it are held by the operator and can be
+# shared with anyone who asks. That is the same line the system this is
+# modelled on draws: outputs public, raw broker dumps not.
+data/inbox/
+data/archive/
+data/tpt/
+data/publish.log
+data/cron.log

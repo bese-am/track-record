@@ -1,0 +1,20 @@
+{
+  "count": 2,
+  "files": [
+    {
+      "bytes": 4704,
+      "file": "tpt_completed_trades.39f767a58494e466.csv",
+      "rows": 14,
+      "sha256": "39f767a58494e4665654a3c5f16792a436f87ac88944d3c73d76e4ff255b24ab"
+    },
+    {
+      "bytes": 1911,
+      "file": "tradovate_performance_2026-08.d80ca7ebfcb24eff.csv",
+      "rows": 15,
+      "sha256": "d80ca7ebfcb24effc5560d747c27229e565400c45da9350905270f9274544789"
+    }
+  ],
+  "generated_at": "2026-08-15T21:46:37.464785+00:00",
+  "note": "SHA-256 of every raw export the published record was built from. The exports are NOT published \u2014 they carry the firm's account identifier \u2014 but they are committed to here, so any one of them can later be produced and shown to be the file held on this date.",
+  "schema": "bese.archive-manifest/1"
+}

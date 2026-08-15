@@ -1,0 +1,63 @@
+{
+  "account_continuity": "The series is built from trades, not from account equity, so replacing an account does not reset it.",
+  "account_numbers": null,
+  "account_refs": [
+    "sha256:002c450e3e3a4227"
+  ],
+  "book": "bese_nominal_100k",
+  "chain_head": "d3e9be995c79e09a83a334aa56610a6b61c6eb154314ae2aeca1e0b86d3231fa",
+  "copy_dedup_rule": "One leader account is the source; copies to follower accounts are not counted again.",
+  "cost_basis": {
+    "modelled": 0,
+    "reported": 13
+  },
+  "cost_per_nq_equivalent": {
+    "MNQ": 15.0,
+    "NQ": 4.5
+  },
+  "currency": "USD",
+  "exposure_basis": "1 NQ-equivalent",
+  "inception": "2026-08-03",
+  "inception_anchored_to_funded_capital": true,
+  "inception_note": "The curve starts at the nominal base on the session before the first trade, so the first session's profit and loss is inside the record rather than behind it.",
+  "instrument_multipliers": {
+    "MNQ": 2.0,
+    "NQ": 20.0
+  },
+  "instruments": {
+    "MNQ": {
+      "nq_equiv": 1.6,
+      "standardised_pnl": -390.0,
+      "trades": 4
+    },
+    "NQ": {
+      "nq_equiv": 13.0,
+      "standardised_pnl": 1521.0,
+      "trades": 9
+    }
+  },
+  "label": "BESE-NQ-100K",
+  "last_session": "2026-08-14",
+  "min_sessions_for_annualised": 60,
+  "nominal_capital": 100000.0,
+  "overrides_applied": 0,
+  "published_at": "2026-08-15T21:46:37.463428+00:00",
+  "rate_card": {
+    "MNQ": 1.5,
+    "NQ": 4.5
+  },
+  "review_flags": 4,
+  "sessions": 6,
+  "source_exports": 2,
+  "tagline_en": "NQ / MNQ index futures, normalised to 1 NQ-equivalent exposure",
+  "timestamping": {
+    "available": false,
+    "confirmed": 0,
+    "method": null,
+    "note": "ots client not installed \u2014 snapshots are chained but NOT timestamped. Install opentimestamps-client to close this.",
+    "pending": 0,
+    "proves": "each record existed at or before the anchoring block; combined with the chain, the series can be neither back-dated nor silently shortened",
+    "snapshots": 6
+  },
+  "trades": 13
+}

@@ -1,0 +1,118 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Methodology · Besë Asset Management</title>
+<link rel="stylesheet" href="style.css"></head><body>
+<header class="top"><div class="in">
+<a class="brand" href="index.html">Besë <span>Asset Management</span></a>
+<nav><a href="index.html">Track record</a><a href="portfolio.html">Portfolio</a><a href="verify.html">Verify</a><a href="methodology.html" class=on>Methodology</a><a href="disclosures.html">Disclosures</a></nav></div></header>
+<div class="wrap">
+<p class="eyebrow">Methodology</p>
+<h1>How every number is produced</h1>
+<p class="lede">If something here is unclear or looks wrong, the inputs are
+archived and the calculation code is named below. Check it.</p>
+
+<section class="blk first"><div class="rail"><h2>Sources</h2><div class="note">Where the numbers come from.</div></div><div class="body"><div class="prose">
+<p>Trading is discretionary, on Nasdaq-100 futures, through a proprietary-trading
+firm's funded-account programme. After the session the firm's completed-trade
+export is dropped into the publisher, which archives it and rebuilds the entire
+record from the whole archive &#8212; there is no incremental state to drift.</p>
+<p><b>Fills are exact. NAV is constructed.</b> The trades, prices, sizes and the
+commission actually charged are the firm's own records. The NAV series is not
+read from any account balance: it is computed from those fills by
+<span class="mono">bese.normalize</span> and <span class="mono">bese.nav</span>.
+This is a weaker claim than quoting a broker equity endpoint and is stated as
+such.</p>
+<p>Where the same trade appears in both the firm's export and the broker's, the
+two are matched on their economics and the firm's figures win, because they carry
+the commission actually charged rather than one modelled from a rate card. Both
+linkages were run over the same period and produce identical trades.</p>
+</div></div></section>
+
+<section class="blk"><div class="rail"><h2>Normalisation</h2><div class="note">To 1 NQ-equivalent of exposure.</div></div><div class="body"><div class="prose">
+<p>Positions vary in size, so raw profit and loss is not comparable across
+sessions. Every trade is scaled to one NQ-equivalent of exposure:</p></div><pre>nq_equivalent    = contracts × point_value / 20
+standardised P&amp;L = (gross P&amp;L − costs) / nq_equivalent</pre><div class="prose">
+<p>NQ is $20 per index point and MNQ $2, so one E-mini is 1.0, two are 2.0, five
+micros are 0.5 and ten micros are 1.0.</p>
+<p><b>Costs come off before the division</b>, so they scale with the position the
+way the profit does. At the firm's rates one NQ-equivalent costs
+$4.50 to round-trip in the E-mini against
+$15.00 in the micro &#8212; over three
+times as much for the same risk. That asymmetry is real and the record carries it
+rather than smoothing it away.</p>
+<p><b>Grouping.</b> Brokers report one position as several rows when an order
+fills against several on the other side. Rows are joined into one strategy trade
+by linkage the source can prove: a shared fill id, or a shared entry or exit
+instant to the millisecond within one account, contract and direction. Nothing is
+merged on a similarity guess. Cases no linkage can see &#8212; a scale-in placed as
+two independent orders &#8212; are flagged for review and merged only by a
+published override.</p></div></div></section>
+
+<section class="blk"><div class="rail"><h2>The nominal account</h2><div class="note">$100,000, and what happens to it.</div></div><div class="body"><div class="prose">
+<p>The book starts at $100,000 of nominal capital on
+the session before the first trade, so the first session's result is inside the
+record rather than behind it.</p></div><pre>NAV(t) = NAV(t−1) + standardised P&amp;L(t)
+daily return = NAV(t) / NAV(t−1) − 1</pre><div class="prose">
+<p>Returns are time-weighted; with no external cash flows this reduces exactly to
+compounding the daily returns, and the publisher asserts that identity on every
+run before writing anything.</p>
+<p><b>Exposure does not compound.</b> The strategy holds one NQ-equivalent
+regardless of NAV, so it is constant-notional. The return series compounds
+correctly; the position size does not. A normal convention for a futures record,
+stated rather than left to be inferred.</p></div></div></section>
+
+<section class="blk"><div class="rail"><h2>Sessions</h2><div class="note">A trading day is not a calendar day.</div></div><div class="body"><div class="prose">
+<p>A futures trading day is not a calendar day: the CME equity-index session runs
+17:00 to 16:00 New York time. A trade is dated by when its profit was realised
+&#8212; when the position went flat &#8212; using the firm's own session label where
+it publishes one, and the CME rule otherwise.</p>
+<p>The firm requires every position closed by 5:00 PM New York time and permits
+no overnight holding, which is exactly the session boundary. So no trade can
+straddle one, and the publisher asserts it: a position closing at or after 17:00
+New York aborts the run, because it means either the declared source timezone is
+wrong or a firm rule was breached, and both need a human.</p></div></div></section>
+
+<section class="blk"><div class="rail"><h2>Metrics</h2><div class="note">Computed once, upstream, by open code.</div></div><div class="body"><div class="prose">
+<p>Every metric is computed by <span class="mono">compute_core_metrics</span> in
+<span class="mono">bese.metrics</span> and by nothing else. None is recomputed in
+the publisher and none is computed in the browser: the site renders values that
+were calculated there. That is the only way &#8220;our calculation source is
+public&#8221; is a fact rather than a claim.</p>
+<p>Annualisation basis is 252. Sharpe, Sortino and Calmar are excess of the
+risk-free rate, with gross variants published alongside; the daily rate is
+geometric, <span class="mono">(1 + annual) ** (1/252) − 1</span>. The rate in use
+is echoed in every payload &#8212; currently
+<span class="mono">unavailable — ratios are explicitly gross where shown</span>, so the ratios it
+feeds are explicitly gross rather than quietly assuming a rate of zero.</p>
+<p><b>Annualised statistics are withheld below
+60 sessions.</b> On a handful of sessions they
+are not imprecise estimates, they are meaningless ones. Cumulative return, the
+curve and the best and worst session are published from the first day, because
+those are statements of what happened.</p></div></div></section>
+
+<section class="blk"><div class="rail"><h2>Known limits</h2><div class="note">Stated, not discovered.</div></div><div class="body"><div class="prose">
+<p><b>One account is the source.</b> Trades are placed on a leader account and
+copied to others; the record is built from the leader. A copy that filled at a
+different price or failed to fill is not reflected. One trade copied to five
+accounts is one trade here, not five.</p>
+<p><b>Account changes are not record changes.</b> Prop accounts begin, end and
+are replaced. Because the series is built from trades rather than account equity,
+no account event resets it.</p>
+<p><b>Gaps are gaps.</b> A session with no trades has no row. Nothing is
+interpolated and no value is carried forward.</p>
+<p><b>No benchmark yet.</b> A Nasdaq-100 total-return line is the right
+comparison and is not yet wired in. An empty series is shown as empty rather than
+filled with something convenient.</p>
+<p><b>GIPS-informed, not GIPS-compliant.</b> Compliance requires third-party
+verification, which has not been performed. No such claim is made anywhere.</p>
+</div></div></section>
+<div class="foot">
+<p><b>Nominal capital, not assets under management.</b> $100,000 is a stated
+normalisation base. It is not client money, and no prop firm's advertised
+account size is treated as capital under management.</p>
+<p>Past performance is not indicative of future results. Nothing here is
+investment advice, an offer, or a solicitation. Futures trading carries
+substantial risk of loss. See <a href="disclosures.html">disclosures</a>.</p>
+<p>Published 15 August 2026, 21:46 UTC · every figure computed by
+<span class="mono">bese.metrics</span>, not by the browser.</p>
+</div></div><div class="tip" id="tip"></div><script src="app.js"></script></body></html>

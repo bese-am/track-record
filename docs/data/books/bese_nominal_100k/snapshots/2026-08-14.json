@@ -1,0 +1,81 @@
+{
+  "book": "bese_nominal_100k",
+  "cumulative_return": 0.011309999999999931,
+  "daily_return": 0.004080619539316821,
+  "disclosure": {
+    "constructed_nav": "NAV is constructed from broker records, not read from an account",
+    "nominal_capital": "Nominal capital, not assets under management",
+    "normalised_exposure": "Returns are normalised to 1 NQ-equivalent exposure",
+    "not_advice": "Past performance is not indicative of future results",
+    "not_gips": "GIPS-informed, not GIPS-compliant",
+    "short_history": "Annualised statistics are withheld until there is enough history",
+    "single_source": "One account is the source; the others follow it",
+    "strategy_not_account": "This is a record of a strategy, not of an account"
+  },
+  "hash": "d3e9be995c79e09a83a334aa56610a6b61c6eb154314ae2aeca1e0b86d3231fa",
+  "metrics": {
+    "annualised_basis": 252,
+    "computed_by": "bese.metrics.compute_core_metrics",
+    "insufficient_history": {
+      "have": 6,
+      "label_en": "insufficient history — 6/60",
+      "need": 60,
+      "suppressed": [
+        "sharpe",
+        "sharpe_gross",
+        "sharpe_autocorr_adj",
+        "sortino",
+        "sortino_gross",
+        "calmar",
+        "calmar_gross",
+        "cagr",
+        "volatility",
+        "max_drawdown",
+        "var_normal_95",
+        "skew",
+        "kurtosis",
+        "ev_excess_annual",
+        "win_rate"
+      ]
+    },
+    "risk_free_annual": 0.0,
+    "risk_free_convention": "daily = (1 + annual) ** (1/252) - 1",
+    "risk_free_source": "unavailable — ratios are explicitly gross where shown",
+    "sharpe_convention": "excess of risk_free_annual (see risk_free_source)",
+    "values": {
+      "best_day": 0.0052000000000000934,
+      "cagr": null,
+      "calmar": null,
+      "calmar_gross": null,
+      "cumulative_return": 0.011309999999999931,
+      "ev_excess_annual": null,
+      "kurtosis": null,
+      "max_drawdown": null,
+      "n_obs": 6,
+      "negative_days": 1,
+      "positive_days": 5,
+      "sharpe": null,
+      "sharpe_autocorr_adj": null,
+      "sharpe_gross": null,
+      "skew": null,
+      "sortino": null,
+      "sortino_gross": null,
+      "var_normal_95": null,
+      "volatility": null,
+      "win_rate": null,
+      "worst_day": -0.004992323312366875
+    }
+  },
+  "nav": {
+    "equity": 101131.0,
+    "nominal_capital": 100000.0,
+    "source": "constructed from broker completed-trade records by bese.normalize + bese.nav"
+  },
+  "prev_hash": "d24892deada0bd33b913c889c7dbfbef651928118746f30790610d5bc10b55bc",
+  "published_at": "2026-08-15T20:50:01.880481+00:00",
+  "schema": "bese.track-record.snapshot/1",
+  "session_date": "2026-08-14",
+  "sessions": 6,
+  "standardised_pnl": 411.0,
+  "trades": 3
+}

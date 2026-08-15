@@ -1,0 +1,451 @@
+#!/usr/bin/env python3
+"""The Besë publisher. Runs unattended on a schedule.
+
+    inbox/  ->  archive/  ->  full rebuild  ->  data repo  ->  site  ->  git push
+
+Design notes, because they are the difference between an automation that can
+be trusted and one that quietly drifts:
+
+**It rebuilds from the whole archive, every run.** No incremental state, no
+"last processed row", no cursor to get out of step with reality. Any run
+reproduces the entire record from the raw exports, so a bad run is fixed by
+running again. This is the property RVB gets by reading its parquet archive
+rather than its live database.
+
+**Ingesting the same export twice is a no-op.** Both vendors export the period
+to date, so consecutive pulls overlap by design.
+
+**Nothing in the inbox is deleted.** Files move to archive/ named by content
+hash. The archive is the primary source; everything else is derived and can be
+thrown away and rebuilt.
+
+**It refuses rather than guesses.** Every check below aborts with a non-zero
+exit and changes nothing on disk.
+
+Usage:
+    python3 autopublish.py              # normal scheduled run
+    python3 autopublish.py --dry-run    # rebuild, report, write nothing
+    python3 autopublish.py --push       # also git commit and push
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import hashlib
+import json
+import shutil
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+from bese import site as site_builder
+from bese.chain import GENESIS, rebuild_chain, verify, write_snapshot
+from bese.contracts import CONTRACTS, COST_PER_NQ_EQUIVALENT
+from bese.disclosures import DISCLOSURES
+from bese.group import group_legs
+from bese.group import apply_overrides
+from bese.metrics import (MIN_SESSIONS_FOR_ANNUALISED, MetricInputs,
+                          compute_analytics, compute_core_metrics)
+from bese.nav import NOMINAL_CAPITAL, build_nav, cumulative_return
+from bese.normalize import normalise_all
+from bese import stamp as ots
+from bese.session import _ET, closes_after_rollover
+from bese.sources import read_many
+
+ROOT = Path(__file__).parent
+INBOX = ROOT / "data" / "inbox"
+ARCHIVE = ROOT / "data" / "archive"
+REPO = ROOT / "data" / "repo"                 # the publishable data repository
+SITE = ROOT / "docs"                          # rendered site; GitHub Pages serves /docs
+LOG = ROOT / "data" / "publish.log"
+
+BOOK = "bese_nominal_100k"
+LABEL = "BESE-NQ-100K"
+TAGLINE = "NQ / MNQ index futures, normalised to 1 NQ-equivalent exposure"
+BOOK_DIR = REPO / "books" / BOOK
+
+# The risk-free rate. RVB uses FRED DGS3MO averaged over the measured window.
+# Wire the same source in on the trading box; until then the payload says so
+# explicitly rather than quietly pretending the rate is zero. Nothing published
+# today depends on it — every ratio it feeds is gated until 60 sessions.
+RISK_FREE_ANNUAL = 0.0
+RISK_FREE_SOURCE = "unavailable — ratios are explicitly gross where shown"
+
+
+def log(msg: str = "") -> None:
+    line = (f"{datetime.now(timezone.utc):%Y-%m-%d %H:%M:%S}  {msg}" if msg else "")
+    print(line)
+    LOG.parent.mkdir(parents=True, exist_ok=True)
+    with open(LOG, "a", encoding="utf-8") as fh:
+        fh.write(line + "\n")
+
+
+def die(msg: str) -> None:
+    log(f"ABORT  {msg}")
+    log("Nothing was written. The published record is unchanged.")
+    sys.exit(1)
+
+
+def sweep_inbox(dry: bool) -> int:
+    INBOX.mkdir(parents=True, exist_ok=True)
+    ARCHIVE.mkdir(parents=True, exist_ok=True)
+    moved = 0
+    for f in sorted(INBOX.glob("*.csv")):
+        digest = hashlib.sha256(f.read_bytes()).hexdigest()[:16]
+        dest = ARCHIVE / f"{f.stem}.{digest}.csv"
+        if dest.exists():
+            log(f"  already archived, discarding duplicate: {f.name}")
+            if not dry:
+                f.unlink()
+            continue
+        log(f"  new export: {f.name} -> {dest.name}")
+        if not dry:
+            shutil.move(str(f), dest)
+        moved += 1
+    return moved
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--push", action="store_true")
+    ap.add_argument("--no-site", action="store_true")
+    args = ap.parse_args()
+
+    log("=" * 62)
+    log(f"Besë publisher run  (dry-run={args.dry_run})")
+
+    # 1 -------------------------------------------------------------------
+    log("1. sweeping inbox")
+    new = sweep_inbox(args.dry_run)
+    sources = sorted(ARCHIVE.glob("*.csv"))
+    if args.dry_run:
+        sources += sorted(INBOX.glob("*.csv"))
+    if not sources:
+        log("  no exports in the archive; nothing to publish")
+        return
+    log(f"  {new} new, {len(sources)} export(s) in archive")
+
+    # 2 -------------------------------------------------------------------
+    log("2. ingesting")
+    legs, stats = read_many(sources)
+    log(f"  {stats['rows']} rows from {stats['files']} export(s): {stats['by_source']}")
+    log(f"  -> {len(legs)} unique round turns "
+        f"({stats['cross_format']} seen in both formats, TPT preferred)")
+    if stats["conflicts"]:
+        for c in stats["conflicts"]:
+            log(f"  CONFLICT {c}")
+        die("the same round turn is reported differently by two exports")
+
+    # 3 -------------------------------------------------------------------
+    log("3. reconciling stated P&L against price x multiplier x size")
+    if stats["notes"]:
+        for n in stats["notes"][:5]:
+            log(f"  MISMATCH {n}")
+        die("stated P&L disagrees with the contract multiplier — check contracts.py")
+    log(f"  {len(legs)}/{len(legs)} reconcile against the published point values")
+
+    # 4 -------------------------------------------------------------------
+    log("4. grouping and normalising")
+    trades = group_legs(legs)
+
+    overrides_file = ROOT / "overrides.json"
+    if overrides_file.exists():
+        overrides = json.loads(overrides_file.read_text(encoding="utf-8"))
+        before = len(trades)
+        trades = apply_overrides(trades, overrides)
+        applied = sum(1 for t in trades if t.override)
+        log(f"  overrides.json: {before} -> {len(trades)} trades, "
+            f"{applied} carrying an override")
+
+    merged = [t for t in trades if len(t.legs) > 1]
+    flagged = [t for t in trades if t.flags]
+    log(f"  {len(legs)} round turns -> {len(trades)} strategy trades "
+        f"({len(merged)} assembled from multiple fills)")
+    for t in flagged:
+        log(f"    review: {t.trade_id}  {t.qty:g} {t.root} {t.direction}")
+    norm = normalise_all(trades)
+    nav = build_nav(norm)
+    modelled = [t for t in norm if t.cost_basis == "modelled"]
+    if modelled:
+        log(f"  {len(modelled)} trade(s) on the MODELLED rate card rather than the "
+            f"commission charged — avoidable error, amplified 10x on micros")
+    else:
+        log(f"  all {len(norm)} trades use the commission actually charged")
+
+    # 5 -------------------------------------------------------------------
+    log("5. checking session boundaries (also validates the source timezone)")
+    late = [t for t in trades if closes_after_rollover(t.closed_at)]
+    if late:
+        for t in late[:5]:
+            log(f"  {t.trade_id} closed {t.closed_at.astimezone(_ET):%H:%M %Z}")
+        die("a position closed at or after 17:00 ET. Take Profit Trader requires "
+            "flat by 5:00 PM ET, so either the declared source timezone is wrong "
+            "— in which case every session date is suspect — or a rule was breached.")
+    log(f"  all {len(trades)} trades flat before 17:00 ET")
+
+    # 6 -------------------------------------------------------------------
+    log("6. checking the record did not shrink")
+    prior = BOOK_DIR / "meta.json"
+    if prior.exists():
+        old = json.loads(prior.read_text(encoding="utf-8"))
+        if len(norm) < old["trades"] or len(nav) - 1 < old["sessions"]:
+            die(f"record would go from {old['trades']} trades / {old['sessions']} "
+                f"sessions to {len(norm)} / {len(nav) - 1}. An export is missing.")
+        log(f"  {old['trades']} -> {len(norm)} trades, "
+            f"{old['sessions']} -> {len(nav) - 1} sessions")
+    else:
+        log("  first run, no prior record to compare")
+
+    cum = cumulative_return(nav)
+    compounded = 1.0
+    for p in nav[1:]:
+        compounded *= 1 + p.daily_return
+    if abs(compounded - 1 - cum) > 1e-9:
+        die("daily returns do not compound to the cumulative return")
+    log("  compounding identity holds")
+
+    # 7 -------------------------------------------------------------------
+    log("7. computing metrics")
+    inputs = MetricInputs(
+        nav=[(p.date, p.equity) for p in nav],
+        returns=[(p.date, p.daily_return) for p in nav if p.daily_return is not None],
+        rf_annual=RISK_FREE_ANNUAL,
+        rf_source=RISK_FREE_SOURCE,
+    )
+    core = compute_core_metrics(inputs)
+    analytics = compute_analytics(inputs)
+    gate = core.get("insufficient_history")
+    log(f"  bese.metrics.compute_core_metrics over {len(inputs.returns)} sessions"
+        + (f" — {len(gate['suppressed'])} statistics withheld "
+           f"({gate['have']}/{gate['need']})" if gate else ""))
+    if not analytics["drawdown_consistent_with_metrics"]:
+        die("the drawdown path and the reported maximum drawdown disagree")
+
+    if args.dry_run:
+        log(f"DRY RUN  would publish NAV {nav[-1].equity:,.2f} "
+            f"({cum * 100:+.4f}%) over {len(nav) - 1} sessions")
+        return
+
+    # 8 -------------------------------------------------------------------
+    log("8. writing the data repository")
+    BOOK_DIR.mkdir(parents=True, exist_ok=True)
+    now = datetime.now(timezone.utc).isoformat()
+
+    with open(BOOK_DIR / "nav.csv", "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["date", "equity", "pnl", "daily_return", "trades"])
+        for p in nav:
+            w.writerow([p.date, f"{p.equity:.2f}",
+                        "" if p.pnl is None else f"{p.pnl:.2f}",
+                        "" if p.daily_return is None else repr(p.daily_return),
+                        p.trades])
+
+    with open(BOOK_DIR / "trades.csv", "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["trade_id", "session", "symbol", "direction", "qty", "nq_equiv",
+                    "entry_price", "exit_price", "opened_at", "closed_at",
+                    "gross_pnl", "costs", "cost_basis", "net_pnl",
+                    "standardised_pnl", "legs", "source", "account",
+                    "override", "flags"])
+        for t in norm:
+            w.writerow([t.trade_id, t.session, t.symbol, t.direction, f"{t.qty:g}",
+                        f"{t.nq_equiv:g}", t.entry_price, t.exit_price,
+                        t.opened_at, t.closed_at, f"{t.gross_pnl:.2f}",
+                        f"{t.costs:.2f}", t.cost_basis, f"{t.net_pnl:.2f}",
+                        f"{t.standardised_pnl:.2f}", t.legs, t.source,
+                        t.account_ref or "", t.override or "", t.flags])
+
+    metrics_payload = {"book": BOOK, "as_of": str(nav[-1].date),
+                       "published_at": now, **core}
+    (BOOK_DIR / "metrics.json").write_text(
+        json.dumps(metrics_payload, indent=2, sort_keys=True, default=str) + "\n",
+        encoding="utf-8")
+
+    analytics_payload = {"book": BOOK, "as_of": str(nav[-1].date),
+                         "published_at": now, **analytics}
+    (BOOK_DIR / "analytics.json").write_text(
+        json.dumps(analytics_payload, indent=2, sort_keys=True, default=str) + "\n",
+        encoding="utf-8")
+
+    # Hashed, never the firm's own identifier -- see model.account_ref.
+    accounts = sorted({t.account_ref for t in norm if t.account_ref})
+    instruments = {}
+    for t in norm:
+        d = instruments.setdefault(t.root, {"trades": 0, "nq_equiv": 0.0,
+                                            "standardised_pnl": 0.0})
+        d["trades"] += 1
+        d["nq_equiv"] = round(d["nq_equiv"] + t.nq_equiv, 6)
+        d["standardised_pnl"] = round(d["standardised_pnl"] + t.standardised_pnl, 2)
+
+    meta = {
+        "book": BOOK,
+        "label": LABEL,
+        "tagline_en": TAGLINE,
+        "currency": "USD",
+        "nominal_capital": NOMINAL_CAPITAL,
+        "exposure_basis": "1 NQ-equivalent",
+        "instrument_multipliers": {k: v.point_value for k, v in CONTRACTS.items()},
+        "rate_card": {k: v.round_turn_cost for k, v in CONTRACTS.items()},
+        "cost_per_nq_equivalent": COST_PER_NQ_EQUIVALENT,
+        "cost_basis": {"reported": len(norm) - len(modelled),
+                       "modelled": len(modelled)},
+        "inception": str(nav[0].date),
+        "inception_anchored_to_funded_capital": True,
+        "inception_note": ("The curve starts at the nominal base on the session "
+                           "before the first trade, so the first session's profit "
+                           "and loss is inside the record rather than behind it."),
+        "last_session": str(nav[-1].date),
+        "sessions": len(nav) - 1,
+        "trades": len(norm),
+        "instruments": instruments,
+        "account_refs": accounts,
+        "account_numbers": None,
+        "account_continuity": ("The series is built from trades, not from account "
+                               "equity, so replacing an account does not reset it."),
+        "copy_dedup_rule": ("One leader account is the source; copies to follower "
+                            "accounts are not counted again."),
+        "review_flags": len(flagged),
+        "overrides_applied": sum(1 for t in norm if t.override),
+        "source_exports": len(sources),
+        "min_sessions_for_annualised": MIN_SESSIONS_FOR_ANNUALISED,
+        "published_at": now,
+    }
+
+    # 9 -------------------------------------------------------------------
+    log("9. chaining the session record")
+    prev = GENESIS
+    chain_file = REPO / "CHAIN.jsonl"
+    if chain_file.exists():
+        lines = [ln for ln in chain_file.read_text(encoding="utf-8").splitlines()
+                 if ln.strip()]
+        if lines:
+            prev = json.loads(lines[-1])["hash"]
+
+    existing = {p.stem for p in (BOOK_DIR / "snapshots").glob("*.json")} \
+        if (BOOK_DIR / "snapshots").exists() else set()
+    written = 0
+    for i, p in enumerate(nav):
+        if p.daily_return is None or str(p.date) in existing:
+            continue
+        upto = [q for q in nav[:i + 1]]
+        rets = [(q.date, q.daily_return) for q in upto if q.daily_return is not None]
+        snap_core = compute_core_metrics(MetricInputs(
+            nav=[(q.date, q.equity) for q in upto], returns=rets,
+            rf_annual=RISK_FREE_ANNUAL, rf_source=RISK_FREE_SOURCE))
+        _, prev = write_snapshot(BOOK_DIR, BOOK, str(p.date), {
+            "schema": "bese.track-record.snapshot/1",
+            "published_at": now,
+            "sessions": len(rets),
+            "nav": {"equity": p.equity, "nominal_capital": NOMINAL_CAPITAL,
+                    "source": ("constructed from broker completed-trade records "
+                               "by bese.normalize + bese.nav")},
+            "daily_return": p.daily_return,
+            "cumulative_return": p.equity / nav[0].equity - 1,
+            "standardised_pnl": p.pnl,
+            "trades": p.trades,
+            "metrics": snap_core,
+            "disclosure": {d["id"]: d["title_en"] for d in DISCLOSURES},
+        }, prev)
+        written += 1
+
+    # Commit to the raw exports without publishing them: their hashes go into
+    # the record, the files stay on this machine.
+    manifest = ots.archive_manifest(ARCHIVE, REPO / "archive_manifest.json")
+    log(f"  archive manifest: {manifest['count']} raw export(s) committed by hash")
+
+    entries = rebuild_chain(REPO, BOOK, BOOK_DIR)
+    ok, notes = verify(REPO)
+    if not ok:
+        for n in notes:
+            log(f"  {n}")
+        die("the published chain does not verify")
+    log(f"  {written} new snapshot(s), {len(entries)} chained records — {notes[0]}")
+
+    # A timestamp proves a record existed when it claims to. The chain alone
+    # cannot: it shows the series is internally complete, not that it was not
+    # assembled all at once after the fact.
+    ts = ots.stamp_new_snapshots(BOOK_DIR)
+    if ts["client"] is None:
+        log(f"  NOT TIMESTAMPED — {ts['note']}")
+    else:
+        log(f"  timestamped: {len(ts['stamped'])} new, "
+            f"{len(ts['upgraded'])} confirmed, {len(ts['pending'])} pending "
+            f"(a fresh proof confirms in a few hours)")
+        for f in ts["failed"]:
+            log(f"  stamp failed: {f}")
+
+    meta["timestamping"] = {
+        "method": "OpenTimestamps (Bitcoin)" if ts["client"] else None,
+        "snapshots": ts["total_snapshots"],
+        "confirmed": len(ts["upgraded"]),
+        "pending": len(ts["pending"]),
+        "available": ts["client"] is not None,
+        "note": ts.get("note"),
+        "proves": ("each record existed at or before the anchoring block; "
+                   "combined with the chain, the series can be neither "
+                   "back-dated nor silently shortened"),
+    }
+    meta["chain_head"] = entries[-1]["hash"] if entries else None
+    (BOOK_DIR / "meta.json").write_text(
+        json.dumps(meta, indent=2, sort_keys=True, default=str) + "\n",
+        encoding="utf-8")
+
+    (REPO / "index.json").write_text(json.dumps({
+        "schema": "bese.track-record.index/1",
+        "publisher": "Besë Asset Management",
+        "published_at": now,
+        "min_sessions_for_annualised": MIN_SESSIONS_FOR_ANNUALISED,
+        "disclosures": DISCLOSURES,
+        "chain": {"file": "CHAIN.jsonl", "entries": len(entries)},
+        "books": [{
+            "book": BOOK, "label": LABEL, "tagline_en": TAGLINE,
+            "inception": meta["inception"], "last_session": meta["last_session"],
+            "sessions": meta["sessions"], "trades": meta["trades"],
+            "nominal_capital": NOMINAL_CAPITAL,
+            "cumulative_return": cum,
+            "annualised_gated": bool(gate),
+            "paths": {"meta": f"books/{BOOK}/meta.json",
+                      "metrics": f"books/{BOOK}/metrics.json",
+                      "analytics": f"books/{BOOK}/analytics.json",
+                      "nav": f"books/{BOOK}/nav.csv",
+                      "trades": f"books/{BOOK}/trades.csv",
+                      "snapshots": f"books/{BOOK}/snapshots/"},
+        }],
+    }, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+
+    log(f"  NAV {nav[-1].equity:,.2f}  ({cum * 100:+.4f}%)  "
+        f"{len(nav) - 1} sessions  {len(norm)} trades")
+
+    # 10 ------------------------------------------------------------------
+    if not args.no_site:
+        log("10. rendering the site")
+        pages = site_builder.build(REPO, SITE)
+        log(f"  {len(pages)} pages -> {SITE}")
+
+    if args.push:
+        log("11. publishing to git")
+        try:
+            subprocess.run(["git", "add", "-A", "data/repo", "docs"],
+                           cwd=ROOT, check=True)
+            if subprocess.run(["git", "diff", "--cached", "--quiet"],
+                              cwd=ROOT).returncode == 0:
+                log("  no change to publish")
+            else:
+                msg = (f"publish {nav[-1].date}: NAV {nav[-1].equity:,.2f} "
+                       f"({cum * 100:+.4f}%), {len(norm)} trades")
+                subprocess.run(["git", "commit", "-m", msg], cwd=ROOT, check=True)
+                subprocess.run(["git", "push"], cwd=ROOT, check=True)
+                log(f"  pushed: {msg}")
+        except subprocess.CalledProcessError as e:
+            log(f"  git failed ({e}) — files are written; push by hand")
+
+    if flagged:
+        log(f"ATTENTION  {len(flagged)} trade(s) want a human decision")
+    log("done")
+
+
+if __name__ == "__main__":
+    main()
