@@ -1,9 +1,14 @@
-# Vercel only needs the rendered site and the config that points at it.
-# Everything else is the machinery that produces it and belongs in git, not in
-# a deployment upload.
-bese/
-data/
-*.py
-*.md
-.gitignore
+﻿# Vercel only needs the rendered site and the config that points at it.
+#
+# Every pattern here is ANCHORED with a leading slash. Without one, gitignore
+# semantics match at any depth -- so a bare `data/` also excluded `docs/data/`,
+# which is the published record itself, and the site deployed with its own
+# evidence stripped out. Anchor these or they reach further than they look.
+/bese/
+/data/
+/tests/
+/*.py
+/*.md
+/.gitignore
+/overrides.json
 __pycache__/
