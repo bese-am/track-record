@@ -961,14 +961,15 @@ def build(repo: Path, out: Path) -> list[Path]:
     # GitHub Pages runs Jekyll over the directory unless told not to, which
     # silently drops any path beginning with an underscore. The record must be
     # served byte-for-byte or the hashes on the Verify page stop matching.
-    (out / ".nojekyll").write_text("", encoding="utf-8")
-    (out / "style.css").write_text(CSS.strip() + "\n", encoding="utf-8")
-    (out / "app.js").write_text(JS.strip() + "\n", encoding="utf-8")
+    (out / ".nojekyll").write_text("", encoding="utf-8", newline="\n")
+    (out / "style.css").write_text(CSS.strip() + "\n", encoding="utf-8", newline="\n")
+    (out / "app.js").write_text(JS.strip() + "\n", encoding="utf-8", newline="\n")
 
     cname = repo.parent.parent / "CNAME"
     if cname.exists():
         (out / "CNAME").write_text(
-            cname.read_text(encoding="utf-8").strip() + "\n", encoding="utf-8")
+            cname.read_text(encoding="utf-8").strip() + "\n",
+            encoding="utf-8", newline="\n")
 
     written = []
     for name, body in [
@@ -979,7 +980,8 @@ def build(repo: Path, out: Path) -> list[Path]:
         ("disclosures.html", disclosures_page(idx)),
     ]:
         (out / name).write_text(
-            shell(dict(PAGES)[name], name, body, published), encoding="utf-8")
+            shell(dict(PAGES)[name], name, body, published),
+            encoding="utf-8", newline="\n")
         written.append(out / name)
 
     data_out = out / "data"

@@ -235,7 +235,7 @@ def main() -> None:
     now = datetime.now(timezone.utc).isoformat()
 
     with open(BOOK_DIR / "nav.csv", "w", newline="", encoding="utf-8") as fh:
-        w = csv.writer(fh)
+        w = csv.writer(fh, lineterminator="\n")
         w.writerow(["date", "equity", "pnl", "daily_return", "trades"])
         for p in nav:
             w.writerow([p.date, f"{p.equity:.2f}",
@@ -244,7 +244,7 @@ def main() -> None:
                         p.trades])
 
     with open(BOOK_DIR / "trades.csv", "w", newline="", encoding="utf-8") as fh:
-        w = csv.writer(fh)
+        w = csv.writer(fh, lineterminator="\n")
         w.writerow(["trade_id", "session", "symbol", "direction", "qty", "nq_equiv",
                     "entry_price", "exit_price", "opened_at", "closed_at",
                     "gross_pnl", "costs", "cost_basis", "net_pnl",
@@ -262,13 +262,13 @@ def main() -> None:
                        "published_at": now, **core}
     (BOOK_DIR / "metrics.json").write_text(
         json.dumps(metrics_payload, indent=2, sort_keys=True, default=str) + "\n",
-        encoding="utf-8")
+        encoding="utf-8", newline="\n")
 
     analytics_payload = {"book": BOOK, "as_of": str(nav[-1].date),
                          "published_at": now, **analytics}
     (BOOK_DIR / "analytics.json").write_text(
         json.dumps(analytics_payload, indent=2, sort_keys=True, default=str) + "\n",
-        encoding="utf-8")
+        encoding="utf-8", newline="\n")
 
     # Hashed, never the firm's own identifier -- see model.account_ref.
     accounts = sorted({t.account_ref for t in norm if t.account_ref})
@@ -391,7 +391,7 @@ def main() -> None:
     meta["chain_head"] = entries[-1]["hash"] if entries else None
     (BOOK_DIR / "meta.json").write_text(
         json.dumps(meta, indent=2, sort_keys=True, default=str) + "\n",
-        encoding="utf-8")
+        encoding="utf-8", newline="\n")
 
     (REPO / "index.json").write_text(json.dumps({
         "schema": "bese.track-record.index/1",

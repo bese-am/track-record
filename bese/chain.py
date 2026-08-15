@@ -69,7 +69,7 @@ def write_snapshot(book_dir: Path, book: str, session: str,
             f"{path.name} already exists with a different hash. A published "
             f"session is immutable; correct it with an override, not an edit.")
 
-    path.write_text(canonical(body), encoding="utf-8")
+    path.write_text(canonical(body), encoding="utf-8", newline="\n")
     return path, body["hash"]
 
 
@@ -115,7 +115,7 @@ def rebuild_chain(root: Path, book: str, book_dir: Path) -> list[dict]:
 
     chain_file.write_text(
         "".join(json.dumps(e, sort_keys=True) + "\n" for e in entries),
-        encoding="utf-8")
+        encoding="utf-8", newline="\n")
     return entries
 
 
