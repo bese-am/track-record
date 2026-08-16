@@ -149,17 +149,28 @@ def chain_strip(chain, anchors, compact=False):
     is the point. No segment carries a number: the table underneath is the
     place for figures, and a label on every link would be unreadable by
     session forty anyway.
+
+    Hovering a segment shows that session's hash in full. That is the whole
+    argument of the picture made checkable in one gesture: the reader can take
+    the string off any link and find it in the table below, in CHAIN.jsonl, or
+    in the snapshot file itself, and see the three agree. A ribbon that could
+    not be cross-checked would be decoration.
+
+    `title` carries the same text for anyone without JavaScript, and the
+    script removes it on load so the two tooltips never both appear.
     """
     if not chain:
         return ""
     segs = ""
     for e in chain:
-        d = e["session_date"]
+        d, h = e["session_date"], e.get("hash") or ""
         blk = (anchors or {}).get(d)
         cls = "seg anchored" if blk else "seg"
-        title = (f"{d} \u00b7 anchored in Bitcoin block {blk}" if blk
-                 else f"{d} \u00b7 chained, awaiting confirmation")
-        segs += f'<span class="{cls}" title="{esc(title)}"></span>'
+        state = (f"anchored in Bitcoin block {blk}" if blk
+                 else "chained, awaiting confirmation")
+        head = f"{d} \u00b7 {state}"
+        segs += (f'<span class="{cls}" title="{esc(head)}&#10;{esc(h)}" '
+                 f'data-title="{esc(head)}" data-hash="{esc(h)}"></span>')
     if compact:
         return f'<div class="strip compact">{segs}</div>'
     # Deliberately no count of how many are anchored. A reader who wants that
@@ -411,6 +422,11 @@ stroke-linecap:round}
 .strip{display:flex;gap:2px;margin:0 0 9px;height:26px}
 .strip .seg{flex:1 1 0;min-width:2px;background:var(--hairline);border-radius:1px}
 .strip .seg.anchored{background:var(--accent)}
+/* The hover target is the segment itself, so it has to say so. An outline
+   rather than a colour change: colour on this ribbon means anchored, and
+   nothing else is allowed to borrow it. */
+.strip .seg{cursor:crosshair}
+.strip .seg:hover{outline:2px solid var(--fg);outline-offset:1px}
 .strip.compact{height:8px;margin:14px 0 0}
 .strip-ends{display:flex;justify-content:space-between;gap:12px;margin:0 0 20px;
 font-size:11px;color:var(--fg-faint);font-variant-numeric:tabular-nums}
@@ -512,6 +528,11 @@ background:var(--bg);border:1px solid var(--hairline);padding:8px 11px;
 font-size:12px;z-index:9}
 .tip b{display:block;font-size:10.5px;color:var(--fg-faint);font-weight:400;
 margin-bottom:3px}
+/* A SHA-256 is 64 characters. Broken anywhere, in a monospace face, so it can
+   be read off the screen and compared against the table character by
+   character -- which is the only reason it is here. */
+.tip .h{display:block;max-width:34ch;font-size:11px;line-height:1.5;
+font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
 """
 
 JS = """
@@ -530,6 +551,20 @@ document.querySelectorAll('.hit').forEach(el=>{
   tip.style.top=(e.clientY-12)+'px';});
  el.addEventListener('mouseleave',()=>{tip.style.opacity='0';
   document.querySelectorAll('.cross,.focus').forEach(n=>n.style.display='none');});
+});
+const place=(e)=>{const tw=tip.offsetWidth||230;
+ tip.style.left=Math.max(8,Math.min(e.clientX+14,innerWidth-tw-8))+'px';
+ tip.style.top=(e.clientY-12)+'px';};
+document.querySelectorAll('.strip .seg').forEach(el=>{
+ el.removeAttribute('title');
+ el.addEventListener('mouseenter',e=>{
+  tip.replaceChildren(
+   Object.assign(document.createElement('b'),{textContent:el.dataset.title}),
+   Object.assign(document.createElement('span'),
+    {className:'h',textContent:el.dataset.hash}));
+  place(e);tip.style.opacity='1';});
+ el.addEventListener('mousemove',place);
+ el.addEventListener('mouseleave',()=>{tip.style.opacity='0';});
 });
 """
 
