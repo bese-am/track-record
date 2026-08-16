@@ -37,24 +37,180 @@ exists.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 CALENDAR_TIMEOUT = 90
 
 
+#: The calendars the reference client submits to by default. Listed here
+#: because we talk to them directly rather than through the CLI -- see
+#: `_native_stamp` for why.
+CALENDARS = (
+    "https://a.pool.opentimestamps.org",
+    "https://b.pool.opentimestamps.org",
+    "https://a.pool.eternitywall.com",
+    "https://ots.btc.catallaxy.com",
+)
+#: A proof is worth writing once this many calendars have committed to it.
+MIN_CALENDARS = 2
+
+
+def _ots_lib():
+    """The OpenTimestamps library, or None.
+
+    Deliberately NOT `otsclient`. The reference CLI is a thin wrapper around
+    this library, but `otsclient.cmds` imports `bitcoin.rpc` at module level
+    for its *verify* path, which drags in `bitcoin.core.key`, which does:
+
+        ctypes.cdll.LoadLibrary(ctypes.util.find_library('ssl') or ...)
+
+    On Windows that lookup returns None and the import dies before any command
+    runs -- so `ots stamp` is unusable there even though stamping involves no
+    Bitcoin operations whatsoever. Talking to the library directly skips the
+    broken module entirely: submitting a digest to a calendar is an HTTP POST,
+    and the proof format is pure serialisation.
+
+    It also removes a subprocess, a PATH lookup and an OpenSSL dependency from
+    a job that runs unattended, which is worth having regardless of platform.
+    """
+    try:
+        from opentimestamps.calendar import RemoteCalendar          # noqa: F401
+        from opentimestamps.core.op import OpAppend, OpSHA256       # noqa: F401
+        from opentimestamps.core.serialize import (                 # noqa: F401
+            StreamDeserializationContext, StreamSerializationContext)
+        from opentimestamps.core.timestamp import DetachedTimestampFile  # noqa: F401
+        import opentimestamps.core.notary as notary                 # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _is_confirmed(timestamp) -> bool:
+    from opentimestamps.core.notary import BitcoinBlockHeaderAttestation
+    return any(isinstance(a, BitcoinBlockHeaderAttestation)
+               for _, a in timestamp.all_attestations())
+
+
+def _native_stamp(path: Path) -> tuple[bool, str]:
+    import os
+    from opentimestamps.calendar import RemoteCalendar
+    from opentimestamps.core.op import OpAppend, OpSHA256
+    from opentimestamps.core.serialize import StreamSerializationContext
+    from opentimestamps.core.timestamp import DetachedTimestampFile
+
+    with open(path, "rb") as fd:
+        file_ts = DetachedTimestampFile.from_fd(OpSHA256(), fd)
+
+    # A random nonce before the second hash, exactly as the reference client
+    # does it: the calendar learns a digest that reveals nothing about the
+    # file, and two files stamped together cannot be linked by their proofs.
+    nonce = file_ts.timestamp.ops.add(OpAppend(os.urandom(16)))
+    merkle_root = nonce.ops.add(OpSHA256())
+
+    ok, problems = 0, []
+    for url in CALENDARS:
+        try:
+            merkle_root.merge(
+                RemoteCalendar(url).submit(merkle_root.msg, timeout=CALENDAR_TIMEOUT))
+            ok += 1
+        except Exception as e:                                  # noqa: BLE001
+            problems.append(f"{url.split('//')[-1]}: {e}")
+
+    if ok < MIN_CALENDARS:
+        return False, (f"only {ok} of {len(CALENDARS)} calendars responded; "
+                       f"not writing a proof — " + "; ".join(problems))
+
+    proof = path.with_suffix(path.suffix + ".ots")
+    with open(proof, "xb") as fd:
+        file_ts.serialize(StreamSerializationContext(fd))
+    return True, f"{ok}/{len(CALENDARS)} calendars committed"
+
+
+def _native_upgrade(proof: Path) -> tuple[bool, str]:
+    """Ask the calendars to replace pending commitments with Bitcoin ones."""
+    from opentimestamps.calendar import RemoteCalendar
+    from opentimestamps.core.notary import PendingAttestation
+    from opentimestamps.core.serialize import (
+        StreamDeserializationContext, StreamSerializationContext)
+    from opentimestamps.core.timestamp import DetachedTimestampFile
+
+    with open(proof, "rb") as fd:
+        file_ts = DetachedTimestampFile.deserialize(StreamDeserializationContext(fd))
+    if _is_confirmed(file_ts.timestamp):
+        return True, "Success! Bitcoin attests"
+
+    def directly_verified(stamp):
+        if stamp.attestations:
+            yield stamp
+        else:
+            for sub in stamp.ops.values():
+                yield from directly_verified(sub)
+
+    before = {a for _, a in file_ts.timestamp.all_attestations()}
+    for sub in list(directly_verified(file_ts.timestamp)):
+        for att in list(sub.attestations):
+            if not isinstance(att, PendingAttestation):
+                continue
+            uri = att.uri.decode() if isinstance(att.uri, bytes) else str(att.uri)
+            # Only calendars we chose to trust. An attestation names its own
+            # calendar, so without this check a hostile proof could point the
+            # upgrade at any URL it liked.
+            if uri not in CALENDARS:
+                continue
+            try:
+                sub.merge(RemoteCalendar(uri).get_timestamp(sub.msg))
+            except Exception:                                   # noqa: BLE001
+                continue
+
+    after = {a for _, a in file_ts.timestamp.all_attestations()}
+    if after != before:
+        tmp = proof.with_suffix(proof.suffix + ".tmp")
+        with open(tmp, "wb") as fd:
+            file_ts.serialize(StreamSerializationContext(fd))
+        tmp.replace(proof)
+
+    return (_is_confirmed(file_ts.timestamp),
+            "Success! Bitcoin attests" if _is_confirmed(file_ts.timestamp)
+            else "still pending confirmation")
+
+
+def _client() -> list[str] | None:
+    """How to invoke the OpenTimestamps client, or None if it is absent.
+
+    `pip install opentimestamps-client` drops `ots.exe` into the per-user
+    Scripts directory, which is not on PATH in a default Windows Python
+    install -- pip even warns about it and the warning scrolls past. The
+    result was a publisher that installed the client successfully and then
+    reported "not installed" forever, which is a bad failure because it looks
+    like a decision rather than a lookup miss.
+
+    So: PATH first, then the module directly through the interpreter that is
+    already running. The second form needs no PATH at all and is what makes
+    this work unattended.
+    """
+    exe = shutil.which("ots")
+    if exe:
+        return [exe]
+    if importlib.util.find_spec("otsclient") is not None:
+        return [sys.executable, "-m", "otsclient.ots"]
+    return None
+
+
 def available() -> bool:
-    return shutil.which("ots") is not None
+    return _ots_lib() or _client() is not None
 
 
 def _run(args: list[str], timeout: int = CALENDAR_TIMEOUT) -> tuple[bool, str]:
-    exe = shutil.which("ots")
+    exe = _client()
     if not exe:
         return False, "ots client not installed"
     try:
-        r = subprocess.run([exe, *args], capture_output=True, text=True,
+        r = subprocess.run([*exe, *args], capture_output=True, text=True,
                            timeout=timeout, check=False)
         return r.returncode == 0, ((r.stdout or "") + (r.stderr or "")).strip()
     except subprocess.TimeoutExpired:
@@ -68,6 +224,11 @@ def stamp(path: Path) -> tuple[bool, str]:
     proof = path.with_suffix(path.suffix + ".ots")
     if proof.exists():
         return True, "already stamped"
+    if _ots_lib():
+        try:
+            return _native_stamp(path)
+        except Exception as e:                                  # noqa: BLE001
+            return False, f"{type(e).__name__}: {e}"
     ok, out = _run(["stamp", str(path)])
     return (ok and proof.exists()), out or "stamped"
 
@@ -78,20 +239,37 @@ def upgrade(proof: Path) -> tuple[bool, str]:
     INCOMPLETE, normally for a few hours. Incomplete means 'not yet confirmed',
     not 'invalid' — and saying so is the difference between a caveat and a
     misrepresentation."""
+    if _ots_lib():
+        try:
+            return _native_upgrade(proof)
+        except Exception as e:                                  # noqa: BLE001
+            return False, f"{type(e).__name__}: {e}"
     return _run(["upgrade", str(proof)])
 
 
 def verify(path: Path) -> tuple[bool, str]:
+    """Check a proof against the block chain.
+
+    This is the one operation that genuinely needs Bitcoin, so it goes through
+    the reference CLI and needs a local Bitcoin Core node (a pruned one is
+    fine). That is not an inconvenience to work around -- the point of the
+    design is that verification asks no third party to be trusted. The
+    publisher never calls this; it is here for whoever is checking the record.
+    """
     proof = path.with_suffix(path.suffix + ".ots")
     if not proof.exists():
         return False, "no proof beside this file"
+    if _client() is None:
+        return False, ("verifying needs the `ots` CLI and a Bitcoin node; "
+                       "stamping does not, which is why it works without them")
     return _run(["verify", str(proof)])
 
 
 def stamp_new_snapshots(book_dir: Path) -> dict:
     """Stamp every snapshot that has no proof, and try to complete the rest."""
     snaps = sorted((book_dir / "snapshots").glob("*.json"))
-    out = {"client": "opentimestamps-client" if available() else None,
+    out = {"client": ("python-opentimestamps" if _ots_lib()
+                      else "opentimestamps-client" if available() else None),
            "stamped": [], "upgraded": [], "pending": [], "failed": [],
            "total_snapshots": len(snaps)}
 

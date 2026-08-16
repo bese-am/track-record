@@ -696,9 +696,11 @@ def verify_page(idx, meta, chain):
                 "section says so instead of staying quiet.")
     ts_block = ""
     if ts_ok:
-        cmd = ("pip install opentimestamps-client\n"
-               f"ots verify books/{meta['book']}/snapshots/"
-               f"{meta['last_session']}.json.ots")
+        snap_rel = (f"books/{meta['book']}/snapshots/"
+                    f"{meta['last_session']}.json")
+        cmd = (f"pip install opentimestamps-client\n"
+               f"ots info   {snap_rel}.ots      # read the proof, offline\n"
+               f"ots verify {snap_rel}.ots      # check it against Bitcoin")
         ts_block = (
             f"<pre>{esc(cmd)}</pre><div class='prose'>"
             "<p>A fresh proof commits to a calendar server and is <em>incomplete</em> "
@@ -706,6 +708,16 @@ def verify_page(idx, meta, chain):
             "few hours. <span class=\"mono\">ots upgrade</span> completes it; the "
             "publisher does this on every run. Incomplete means &#8220;not yet "
             "confirmed&#8221;, not &#8220;invalid&#8221;.</p>"
+            "<p><span class=\"mono\">ots verify</span> checks the proof against "
+            "the block chain itself, so it needs a Bitcoin Core node (a pruned "
+            "one is fine, and it costs nothing but a one-off sync). That is the "
+            "design working as intended rather than an obstacle: the whole "
+            "point is that checking this record asks you to trust no third "
+            "party. If you would rather not run one, "
+            "<span class=\"mono\">ots info</span> reads the proof offline, and "
+            "the verifier at opentimestamps.org will check it in your browser "
+            "&#8212; at the cost of trusting that site and its block "
+            "explorers.</p>"
             f"<p>{esc(ts.get('confirmed', 0))} of {esc(ts.get('snapshots', 0))} snapshots "
             f"confirmed, {esc(ts.get('pending', 0))} awaiting confirmation.</p></div>")
 
