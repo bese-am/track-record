@@ -220,9 +220,19 @@ def apply_overrides(trades: list[Trade], overrides: dict) -> list[Trade]:
     `overrides` is a committed, hash-chained file -- an unpublished correction
     is indistinguishable from editing the record, so every one is visible.
 
-        merge:   [[trade_id, trade_id, ...], ...]
-        split:   [trade_id, ...]        -> one trade per leg
-        exclude: [trade_id, ...]
+        merge:    [[trade_id, trade_id, ...], ...]
+        split:    [trade_id, ...]        -> one trade per leg
+        exclude:  [trade_id, ...]
+        reviewed: {trade_id: reason, ...}
+
+    `reviewed` is the fourth case and the one the first three could not
+    express: the operator looked at a flagged trade and decided it was already
+    right. Without it the only way to clear a review flag was to change the
+    record, so "I checked and it stands" and "I have not looked yet" were
+    indistinguishable to a reader -- and the flags are public. Recording the
+    decision replaces the machine's `possible_scale_with` guess with the
+    operator's stated reason, which is a stronger disclosure than silence and a
+    much stronger one than a merge nobody can audit.
     """
     by_id = {t.trade_id: t for t in trades}
     dropped: set[str] = set()
@@ -254,5 +264,22 @@ def apply_overrides(trades: list[Trade], overrides: dict) -> list[Trade]:
 
     dropped.update(overrides.get("exclude", []))
     result.extend(t for t in trades if t.trade_id not in dropped)
+
+    reviewed = overrides.get("reviewed", {}) or {}
+    if not isinstance(reviewed, dict):
+        raise ValueError("overrides.json: `reviewed` must be a map of "
+                         "trade_id -> reason")
+    for tr in result:
+        reason = reviewed.get(tr.trade_id)
+        if reason is None:
+            continue
+        tr.flags[:] = [f for f in tr.flags if not f.startswith("possible_scale_with:")]
+        tr.flags.append(f"reviewed:{reason}")
+
+    unknown = sorted(set(reviewed) - {tr.trade_id for tr in result})
+    if unknown:
+        raise ValueError("overrides.json: `reviewed` names trades that do not "
+                         "exist: " + ", ".join(unknown))
+
     result.sort(key=lambda t: (t.closed_at, t.trade_id))
     return result

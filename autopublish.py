@@ -155,15 +155,30 @@ def main() -> None:
 
     overrides_file = ROOT / "overrides.json"
     if overrides_file.exists():
-        overrides = json.loads(overrides_file.read_text(encoding="utf-8"))
+        # A bad overrides file must abort cleanly rather than throw a
+        # traceback: it is hand-edited, it is the one input the operator
+        # writes by hand, and "Nothing was written" has to stay true.
+        try:
+            overrides = json.loads(overrides_file.read_text(encoding="utf-8"))
+        except ValueError as e:
+            die(f"overrides.json is not valid JSON: {e}")
         before = len(trades)
-        trades = apply_overrides(trades, overrides)
+        try:
+            trades = apply_overrides(trades, overrides)
+        except ValueError as e:
+            die(str(e))
         applied = sum(1 for t in trades if t.override)
+        decided = sum(1 for t in trades
+                      if any(f.startswith("reviewed:") for f in t.flags))
         log(f"  overrides.json: {before} -> {len(trades)} trades, "
-            f"{applied} carrying an override")
+            f"{applied} carrying an override, {decided} carrying a decision")
 
     merged = [t for t in trades if len(t.legs) > 1]
-    flagged = [t for t in trades if t.flags]
+    # A trade the operator has ruled on is not outstanding. Counting it as
+    # outstanding forever would train the operator to ignore the warning.
+    flagged = [t for t in trades
+               if any(not f.startswith("reviewed:") for f in t.flags)]
+    reviewed = [t for t in trades if any(f.startswith("reviewed:") for f in t.flags)]
     log(f"  {len(legs)} round turns -> {len(trades)} strategy trades "
         f"({len(merged)} assembled from multiple fills)")
     for t in flagged:
@@ -316,6 +331,7 @@ def main() -> None:
         "copy_dedup_rule": ("One leader account is the source; copies to follower "
                             "accounts are not counted again."),
         "review_flags": len(flagged),
+        "review_decisions": len(reviewed),
         "overrides_applied": sum(1 for t in norm if t.override),
         "source_exports": len(sources),
         "min_sessions_for_annualised": MIN_SESSIONS_FOR_ANNUALISED,
@@ -392,9 +408,32 @@ def main() -> None:
             if stale and head_rec.get("artefacts") is not None:
                 for k in sorted(stale):
                     log(f"  CHANGED {k}")
-                die("published files changed but no new session was added — data "
-                    "for an already-chained session moved. Resolve it with an "
-                    "override rather than letting the chain and the record drift.")
+                # Two different situations, and they deserve different words.
+                figures = [k for k in stale
+                           if k.endswith(("nav.csv", "metrics.json",
+                                          "analytics.json"))]
+                if figures:
+                    die("published figures changed but no new session was "
+                        "added — data for an already-chained session moved. "
+                        "Resolve it with an override rather than letting the "
+                        "chain and the record drift.")
+                # Annotations only: no figure moved. Still cannot be published
+                # today, and the reason is the point of the whole design. Every
+                # session record is immutable and pins the digest of every
+                # published file. Re-pinning the head to match an edit made
+                # after it was chained is exactly the operation the chain
+                # exists to prevent -- it would not matter that this particular
+                # edit is benign, because a reader cannot tell benign from
+                # otherwise without trusting the operator, and the record is
+                # built so they do not have to.
+                die("overrides.json changed, but no published figure moved and "
+                    "no new session was added.\n"
+                    "         Nothing is wrong: commit overrides.json now, and "
+                    "the change enters the\n"
+                    "         record with the next session. A chained record "
+                    "cannot be re-pinned after\n"
+                    "         the fact, which is the property that makes it "
+                    "worth anything.")
 
     entries = rebuild_chain(REPO, BOOK, BOOK_DIR)
     # Verification happens AFTER meta.json and index.json are written, further
