@@ -52,10 +52,10 @@
   "tagline_en": "NQ / MNQ index futures, normalised to 1 NQ-equivalent exposure",
   "timestamping": {
     "available": true,
-    "confirmed": 0,
+    "confirmed": 6,
     "method": "OpenTimestamps (Bitcoin)",
     "note": null,
-    "pending": 6,
+    "pending": 0,
     "proves": "each record existed at or before the anchoring block; combined with the chain, the series can be neither back-dated nor silently shortened",
     "snapshots": 6
   },

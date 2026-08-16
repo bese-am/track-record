@@ -47,15 +47,27 @@ from pathlib import Path
 CALENDAR_TIMEOUT = 90
 
 
-#: The calendars the reference client submits to by default. Listed here
-#: because we talk to them directly rather than through the CLI -- see
-#: `_native_stamp` for why.
-CALENDARS = (
+#: Where proofs are SUBMITTED. These are aggregators: load balancers that take
+#: a digest and hand it to whichever calendar server is behind them.
+AGGREGATORS = (
     "https://a.pool.opentimestamps.org",
     "https://b.pool.opentimestamps.org",
     "https://a.pool.eternitywall.com",
     "https://ots.btc.catallaxy.com",
 )
+
+#: Which calendars an UPGRADE may be fetched from -- a different list, and
+#: conflating the two is why proofs sat pending indefinitely. A pending
+#: attestation names the calendar server that actually holds the commitment
+#: (alice.btc.calendar.opentimestamps.org), never the aggregator it was
+#: submitted through (a.pool.opentimestamps.org). Checking the attestation's
+#: URI against the aggregator list therefore matched nothing, every upgrade was
+#: skipped, and the record reported "pending" forever with no error to show for
+#: it -- the worst shape of bug, one whose symptom is patience.
+#:
+#: The check itself is not optional: an attestation names its own calendar, so
+#: without a whitelist a hostile proof could point the upgrade at any URL it
+#: liked. Use the library's own glob whitelist rather than a hand-rolled one.
 #: A proof is worth writing once this many calendars have committed to it.
 MIN_CALENDARS = 2
 
@@ -113,7 +125,7 @@ def _native_stamp(path: Path) -> tuple[bool, str]:
     merkle_root = nonce.ops.add(OpSHA256())
 
     ok, problems = 0, []
-    for url in CALENDARS:
+    for url in AGGREGATORS:
         try:
             merkle_root.merge(
                 RemoteCalendar(url).submit(merkle_root.msg, timeout=CALENDAR_TIMEOUT))
@@ -122,7 +134,7 @@ def _native_stamp(path: Path) -> tuple[bool, str]:
             problems.append(f"{url.split('//')[-1]}: {e}")
 
     if ok < MIN_CALENDARS:
-        return False, (f"only {ok} of {len(CALENDARS)} calendars responded; "
+        return False, (f"only {ok} of {len(AGGREGATORS)} calendars responded; "
                        f"not writing a proof — " + "; ".join(problems))
 
     proof = path.with_suffix(path.suffix + ".ots")
@@ -133,7 +145,7 @@ def _native_stamp(path: Path) -> tuple[bool, str]:
 
 def _native_upgrade(proof: Path) -> tuple[bool, str]:
     """Ask the calendars to replace pending commitments with Bitcoin ones."""
-    from opentimestamps.calendar import RemoteCalendar
+    from opentimestamps.calendar import DEFAULT_CALENDAR_WHITELIST, RemoteCalendar
     from opentimestamps.core.notary import PendingAttestation
     from opentimestamps.core.serialize import (
         StreamDeserializationContext, StreamSerializationContext)
@@ -157,10 +169,9 @@ def _native_upgrade(proof: Path) -> tuple[bool, str]:
             if not isinstance(att, PendingAttestation):
                 continue
             uri = att.uri.decode() if isinstance(att.uri, bytes) else str(att.uri)
-            # Only calendars we chose to trust. An attestation names its own
-            # calendar, so without this check a hostile proof could point the
-            # upgrade at any URL it liked.
-            if uri not in CALENDARS:
+            if not uri.startswith(("http://", "https://")):
+                uri = "https://" + uri
+            if uri not in DEFAULT_CALENDAR_WHITELIST:
                 continue
             try:
                 sub.merge(RemoteCalendar(uri).get_timestamp(sub.msg))
