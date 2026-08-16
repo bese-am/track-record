@@ -71,7 +71,8 @@ the system this is modelled on, is published. Recompute and compare.</p></div><p
 nav = list(csv.DictReader(open(&quot;books/bese_nominal_100k/nav.csv&quot;)))
 print(float(nav[-1][&quot;equity&quot;]) / float(nav[0][&quot;equity&quot;]) - 1)</pre></div></section>
 
-<section class="blk"><div class="rail"><h2>5. Dating</h2><div class="note">The records were not back-dated.</div></div><div class="body"><div class="prose"><p><b>Not yet in place.</b> The chain shows the series is internally complete and unedited; on its own it does not stop a whole history being assembled in one afternoon. Until proofs are attached, treat the dates as claimed rather than proven &#8212; which is why this section says so instead of staying quiet.</p></div>
+<section class="blk"><div class="rail"><h2>5. Dating</h2><div class="note">The records were not back-dated.</div></div><div class="body"><div class="prose"><p>Each snapshot carries an OpenTimestamps proof beside it, anchoring its hash into a Bitcoin block.</p></div><pre>pip install opentimestamps-client
+ots verify books/bese_nominal_100k/snapshots/2026-08-14.json.ots</pre><div class='prose'><p>A fresh proof commits to a calendar server and is <em>incomplete</em> until the aggregating Bitcoin transaction confirms, normally within a few hours. <span class="mono">ots upgrade</span> completes it; the publisher does this on every run. Incomplete means &#8220;not yet confirmed&#8221;, not &#8220;invalid&#8221;.</p><p>0 of 6 snapshots confirmed, 6 awaiting confirmation.</p></div>
 <div class="prose">
 <p>What a timestamp proves is narrow and worth stating exactly: the file existed
 <em>at or before</em> that block. It does not prove the file did not exist
@@ -107,7 +108,7 @@ history can be rewritten by whoever controls the repository &#8212; which is why
 the hash chain is used alongside branch protection and external timestamps
 rather than instead of them. Whether those two are in force is stated above
 rather than assumed here.</p>
-<p><b>Still outstanding.</b> Timestamp proofs are not attached yet, so the dates on this record are claimed rather than proven. That gap is stated here rather than left to be discovered.</p>
+
 </div></div></section>
 <div class="foot">
 <p><b>Nominal capital, not assets under management.</b> $100,000 is a stated

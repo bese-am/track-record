@@ -51,12 +51,12 @@
   "source_exports": 2,
   "tagline_en": "NQ / MNQ index futures, normalised to 1 NQ-equivalent exposure",
   "timestamping": {
-    "available": false,
+    "available": true,
     "confirmed": 0,
-    "method": null,
-    "note": "ots client not installed \u2014 snapshots are chained but NOT timestamped. Install opentimestamps-client to close this.",
-    "pending": 0,
-    "proves": "nothing yet: no proofs are attached. The chain shows the series is internally consistent and complete relative to itself; it does not show when it was built.",
+    "method": "OpenTimestamps (Bitcoin)",
+    "note": null,
+    "pending": 6,
+    "proves": "each record existed at or before the anchoring block; combined with the chain, the series can be neither back-dated nor silently shortened",
     "snapshots": 6
   },
   "trades": 13
