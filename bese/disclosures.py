@@ -71,6 +71,29 @@ DISCLOSURES: list[dict] = [
             "performance."),
     },
     {
+        "id": "constrained_upside",
+        "severity": "important",
+        "title_en": "Gains are constrained by programme rules; losses are not",
+        "body_en": (
+            "Trading is done inside a proprietary-firm programme whose rules "
+            "attach consequences to crossing certain profit thresholds: an "
+            "account transition, a payout process, a period during which the "
+            "account cannot be traded. Approaching one changes how the strategy "
+            "is traded. Positions are closed earlier than the signal alone would "
+            "suggest, size is reduced, and trading may stop entirely for "
+            "administrative reasons unrelated to the market. Losses carry no "
+            "equivalent brake.\n\n"
+            "So the distribution published here is bounded on the right by a "
+            "rule and open on the left. The largest gain in the trade ledger is "
+            "limited in a way the largest loss is not, an asymmetry visible in "
+            "trades.csv and one that no statistic on this site corrects for. "
+            "Read the upper tail as a limit of the programme rather than of the "
+            "strategy.\n\n"
+            "Sessions may also be absent because the account was unavailable "
+            "rather than because no opportunity arose. The record cannot "
+            "distinguish the two and does not try to."),
+    },
+    {
         "id": "short_history",
         "severity": "important",
         "title_en": "Annualised statistics are withheld until there is enough history",

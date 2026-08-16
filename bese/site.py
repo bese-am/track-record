@@ -1080,8 +1080,12 @@ def disclosures_page(idx):
     out = ""
     for i, d in enumerate(sorted(idx["disclosures"],
                                  key=lambda d: order.get(d["severity"], 9))):
-        out += sec(esc(d["title_en"]),
-                   f'<div class="prose"><p>{esc(d["body_en"])}</p></div>',
+        # A disclosure long enough to need paragraphs should get them. Splitting
+        # on a blank line keeps every single-paragraph disclosure byte-identical
+        # while letting the longer ones breathe.
+        body = "".join(f"<p>{esc(para.strip())}</p>"
+                       for para in d["body_en"].split("\n\n") if para.strip())
+        out += sec(esc(d["title_en"]), f'<div class="prose">{body}</div>',
                    note=esc(d["severity"]).upper(), first=(i == 0))
     return f"""
 <p class="eyebrow">Disclosures</p>
