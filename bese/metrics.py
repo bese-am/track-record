@@ -1,23 +1,19 @@
-"""Besë's metric engine — the public reimplementation of RVB's `rvb.metrics`.
+"""The metric engine. Every published statistic is computed here.
 
-RVB names `compute_core_metrics` in every payload it publishes but does not
-publish the function. For them that is survivable: their NAV is read straight
-from a broker endpoint, so the input is attested even when the arithmetic is
-not. Besë's NAV is CONSTRUCTED from fills, so the same opacity would leave
-nothing checkable at all. This module is therefore public, and every payload
-points at it.
+This module is public because the NAV series it consumes is CONSTRUCTED from
+broker fills rather than read from an account balance. A track record whose
+inputs are constructed and whose arithmetic is hidden offers a reader nothing
+to check, so every published payload names this file and it is open.
 
 Deliberately pure Python: no numpy, no pandas. A reader reproducing these
 numbers should not have to match a library version to get the same answer.
 
-Conventions, all of which follow RVB unless noted:
+Conventions, stated rather than assumed:
 
   * annualisation basis 252
   * Sharpe / Sortino / Calmar are EXCESS of the risk-free rate; gross variants
     published alongside
-  * daily risk-free is geometric: (1 + rf_annual) ** (1/252) - 1. RVB does not
-    publish which convention it uses, so Besë states its own rather than
-    implying agreement.
+  * daily risk-free is geometric: (1 + rf_annual) ** (1/252) - 1
   * annualised statistics are withheld below 60 sessions
   * a withheld or undefined value is None, never 0
 """

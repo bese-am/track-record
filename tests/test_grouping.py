@@ -69,8 +69,8 @@ def test_account_identifier_is_never_published():
 
 
 def test_compounding_identity():
-    """The identity the whole reuse of RVB's metric layer rests on:
-    compounding the daily returns must equal NAV_last / NAV_0 - 1."""
+    """The identity the whole metric layer rests on: compounding the daily
+    returns must equal NAV_last / NAV_0 - 1."""
     fx = _fixtures()
     if not fx:
         return

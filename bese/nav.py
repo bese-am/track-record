@@ -3,16 +3,16 @@
     NAV_0 = 100,000                      at the funded-capital anchor
     NAV_t = NAV_{t-1} + standardised P&L_t
 
-The anchor is the session BEFORE the first trade, following RVB's rule: the
-first session already contains its own P&L, so starting the curve there would
-silently delete day one.
+The anchor is the session BEFORE the first trade: the first session already
+contains its own P&L, so starting the curve there would silently delete day
+one.
 
-Daily return is NAV_t / NAV_{t-1} - 1, identical to RVB. The identity
+Daily return is NAV_t / NAV_{t-1} - 1. The identity
 
     prod(1 + daily_return) == NAV_last / NAV_0
 
-holds exactly, which is why every metric, chart and table downstream of this
-file works on the Bese series with no modification.
+holds exactly, so the compounded daily returns and the ratio of the endpoints
+are the same number, and a reader can check either.
 
 Note the convention, and state it in the methodology: exposure is held at 1
 NQ-equivalent regardless of NAV, so position size does not compound with

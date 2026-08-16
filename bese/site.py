@@ -1,26 +1,21 @@
 """Render the public site from the published data repository.
 
-Structure, layout and palette follow RVB's Next.js site closely, including the
-rule its own stylesheet states: *white ground, thin type, almost no borders —
-contrast is carried by weight and colour, not by boxes.* So there are no cards
-here. Every block is a two-column section with a heading rail on the left and
-one hairline above it, and the page is held together by spacing.
+The layout rule: white ground, thin type, almost no borders — contrast carried
+by weight and colour rather than by boxes. So there are no cards. Every block is
+a two-column section with a heading rail on the left and one hairline above it,
+and the page is held together by spacing.
 
-The framework differs, deliberately: that site renders per request because it
-fetches a repository it does not control, and had to fight framework caching to
-stay fresh. Besë regenerates in the same run that writes the data, so static
-output is the natural fit. The data contract is theirs, so their Next.js app
-would drop onto it unchanged.
+Output is static, generated in the same run that writes the data, so the page
+and the record it renders cannot drift apart.
 
-RVB's hard rule is kept exactly, and it is the important one:
+The hard rule, and it is the important one:
 
     NO METRIC IS COMPUTED IN THIS FILE.
 
 Sharpe, drawdown, monthly returns and the rest arrive already calculated by
 bese.metrics. The single exception is rebasing NAV onto its own first point for
-the chart axis, which is the definition of the axis rather than a statistic --
-the same exception RVB documents on `toCumulative`. If you find yourself about
-to write `math.sqrt(252)` here, stop.
+the chart axis, which is the definition of the axis rather than a statistic. If
+you find yourself about to write `math.sqrt(252)` here, stop.
 
 It follows that None is never zero: a withheld value renders as absence, and a
 gated one says why.
@@ -156,7 +151,7 @@ def returns_chart(daily):
     """Session returns.
 
     Colour carries the sign, and so does the signed label above every bar.
-    Measured, RVB's green/red pair separates by only dE 5.5 under deuteranopia,
+    Measured, a conventional green/red pair separates by only dE 5.5 under deuteranopia,
     so colour is never the only channel here.
     """
     vals = [d["return"] for d in daily if d["return"] is not None]
@@ -247,7 +242,7 @@ def distribution_chart(bins):
 
 # ------------------------------------------------------------------ shell ---
 
-#: Ported from RVB's globals.css. Their comment states the rule the whole look
+#: The palette. One comment states the rule the whole look
 #: depends on: white ground, thin type, almost no borders; contrast carried by
 #: weight and colour, not by boxes. Green and red mean exactly one thing -- the
 #: sign of a return -- and nothing decorative is allowed to use them, or they
@@ -771,11 +766,9 @@ cannot be quietly removed later without breaking every record after it.</p>
 <p>Verification walks the snapshot directory rather than trusting
 <span class="mono">CHAIN.jsonl</span> to list its own contents, and each
 snapshot's filename must match the session date inside it, which must in turn
-follow the one before. Those three checks were added after an audit: without
-the first, deleting the last lines of the chain file silently removed the most
-recent sessions &#8212; and a bad run is always at the end. Without the other
-two, a fabricated session could be appended under any date at all without
-recomputing a single existing hash.</p>
+follow the one before. Together these mean a session cannot be removed,
+reordered or invented: not the most recent ones, which is where a bad run would
+sit, and not an older one dropped in under a chosen date.</p>
 <p>From the project root: <span class="mono">python3 -m bese.verify</span></p>
 </div>''', note="No session can be silently dropped, or invented.")}
 
@@ -787,18 +780,17 @@ the corrections file &#8212; and those are what a reader actually reads. So each
 snapshot also pins their SHA-256 digests, and
 <span class="mono">meta.json</span> is pinned too, excluding the two fields
 derived from the chain itself.</p>
-<p>The audit that prompted this flipped a losing session to a winner in
-<span class="mono">nav.csv</span> and deleted six of thirteen rows from
-<span class="mono">trades.csv</span>; verification reported the record intact
-both times. It now fails on either. The same command also checks that the copy
-served by this website is byte-identical to the copy in the repository.</p>
+<p>So altering a figure in <span class="mono">nav.csv</span>, or removing rows
+from <span class="mono">trades.csv</span>, fails verification. The same command
+also checks that the copy served by this website is byte-identical to the copy
+in the repository.</p>
 </div>''', note="Every published file is covered, not just the snapshots.")}
 
 {sec("4. Recomputation", '''<div class="prose">
 <p><span class="mono">nav.csv</span> is the whole equity curve. Every published
 metric is computed from it by
-<span class="mono">bese.metrics.compute_core_metrics</span> &#8212; which, unlike
-the system this is modelled on, is published. Recompute and compare.</p></div>'''
+<span class="mono">bese.metrics.compute_core_metrics</span>, which is published
+in this repository. Recompute and compare.</p></div>'''
      + f"<pre>{nav_code}</pre>",
      note="The numbers follow from the inputs.")}
 

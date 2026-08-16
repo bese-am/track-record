@@ -231,8 +231,7 @@ def apply_overrides(trades: list[Trade], overrides: dict) -> list[Trade]:
     record, so "I checked and it stands" and "I have not looked yet" were
     indistinguishable to a reader -- and the flags are public. Recording the
     decision replaces the machine's `possible_scale_with` guess with the
-    operator's stated reason, which is a stronger disclosure than silence and a
-    much stronger one than a merge nobody can audit.
+    operator's stated reason, which is a stronger disclosure than silence.
     """
     by_id = {t.trade_id: t for t in trades}
     dropped: set[str] = set()

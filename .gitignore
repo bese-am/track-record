@@ -20,3 +20,14 @@ data/tpt/
 data/raw/
 data/publish.log
 data/cron.log
+
+# Operator runbooks. They describe how the record is produced and
+# deployed, which is not what a reader needs and not what this
+# repository is for. Kept on the operator's machine.
+AUTOMATION.md
+CONNECT_GIT.md
+DEPLOY.md
+
+# Scratch
+*.b64
+*.patch

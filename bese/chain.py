@@ -1,11 +1,7 @@
 """Immutable, hash-chained session records.
 
-Ported from RVB's design (VERIFY.md), then extended after an audit found that
-the original — theirs and ours — proved considerably less than the surrounding
-prose claimed.
-
-Five properties. The first three are the original design; the last two are the
-audit fixes, and they are the ones that make the first three worth anything.
+Five properties. Each is checkable by a stranger holding nothing but a copy of
+the published data directory.
 
   1. Each snapshot hashes its own content — SHA-256 of the record's canonical
      JSON with the `hash` field removed. Change a published number and it
@@ -17,21 +13,19 @@ audit fixes, and they are the ones that make the first three worth anything.
   3. `CHAIN.jsonl` records both hashes plus the bytes-on-disk digest,
      append-only, one line per snapshot.
 
-  4. **Each snapshot pins the digest of every other published file.** Property
-     1 covers the snapshot and nothing else, which meant `nav.csv`,
-     `trades.csv`, `metrics.json` and the rest sat outside the chain entirely —
-     and `nav.csv` is the file the Verify page tells a stranger to recompute
-     from. A losing day could be flipped to a winner, or six of thirteen
-     trades deleted, and verification still reported "chain ok". Now the head
-     snapshot's `artefacts` map is checked against the bytes on disk.
+  4. **Each snapshot pins the digest of every other published file.** A hash
+     chain over session records protects session records and nothing else, so
+     the head snapshot's `artefacts` map carries the SHA-256 of `nav.csv`,
+     `trades.csv`, the metric files, the archive manifest and the corrections
+     file, and verification checks them against the bytes on disk. Those are
+     the files a reader actually reads.
 
-  5. **Verification enumerates the snapshot directory** instead of trusting
+  5. **Verification enumerates the snapshot directory** rather than trusting
      `CHAIN.jsonl` to list its own contents, binds each snapshot's filename to
      the `session_date` inside it, and requires session dates to increase.
-     Previously: deleting the last two lines of `CHAIN.jsonl` silently removed
-     the last two sessions and still verified — and a bad streak is always at
-     the tail. A fabricated back-dated session could be appended under any
-     filename and verified without recomputing a single existing hash.
+     Without the first, truncating the chain file would drop the most recent
+     sessions unnoticed — and a bad run is always at the end. Without the other
+     two, a session could be appended under any date at all.
 
 What this still does not prove — stated here because the gap is the whole
 reason `stamp.py` exists — is WHEN the chain was built. Every hash above is
@@ -41,10 +35,10 @@ timestamp (OpenTimestamps, anchoring into Bitcoin) closes that, and until those
 proofs are attached the chain shows the record is internally consistent, not
 that it is old.
 
-For Besë this carries more weight than it does for RVB. Their NAV comes from a
-broker endpoint, so it is attested independently of the chain. Besë's NAV is
-constructed here, which means the chain plus the open metric code is the whole
-of the evidence.
+This carries more weight here than it would for a record quoting a broker's
+equity endpoint, which is attested independently of any chain. This NAV is
+constructed from fills, so the chain plus the open metric code is the whole of
+the evidence.
 """
 
 from __future__ import annotations
@@ -61,8 +55,8 @@ GENESIS = "0" * 64
 #: carry `chain_head`, derived from the snapshot that would be pinning them,
 #: and a hash cannot cover a value computed from itself. They are covered
 #: instead by `meta_digest()` below, which hashes everything in them EXCEPT the
-#: two derived fields. Without that, `"trades": 999` in meta.json was a
-#: headline figure on the site that nothing checked.
+#: derived fields, so a headline figure such as `"trades"` cannot be altered
+#: without the chain showing it.
 ARTEFACTS = (
     "books/{book}/nav.csv",
     "books/{book}/trades.csv",

@@ -9,8 +9,7 @@ be trusted and one that quietly drifts:
 **It rebuilds from the whole archive, every run.** No incremental state, no
 "last processed row", no cursor to get out of step with reality. Any run
 reproduces the entire record from the raw exports, so a bad run is fixed by
-running again. This is the property RVB gets by reading its parquet archive
-rather than its live database.
+running again.
 
 **Ingesting the same export twice is a no-op.** Both vendors export the period
 to date, so consecutive pulls overlap by design.
@@ -67,8 +66,8 @@ LABEL = "BESE-NQ-100K"
 TAGLINE = "NQ / MNQ index futures, normalised to 1 NQ-equivalent exposure"
 BOOK_DIR = REPO / "books" / BOOK
 
-# The risk-free rate. RVB uses FRED DGS3MO averaged over the measured window.
-# Wire the same source in on the trading box; until then the payload says so
+# The risk-free rate. FRED DGS3MO averaged over the measured window is the
+# intended source; until it is wired in, the payload says so
 # explicitly rather than quietly pretending the rate is zero. Nothing published
 # today depends on it — every ratio it feeds is gated until 60 sessions.
 RISK_FREE_ANNUAL = 0.0

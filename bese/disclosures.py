@@ -1,8 +1,8 @@
 """The disclosures, stamped into every record — not merely rendered on a page.
 
-Ordered by how much each should change how the record is read. RVB's set is
-about paper accounts; Besë's is about nominal capital, normalised exposure and
-a constructed NAV. The structure — id, severity, title, body — is theirs.
+Ordered by how much each should change how the record is read: nominal capital
+first, because mistaking it for assets under management is the single most
+consequential misreading available.
 """
 
 from __future__ import annotations

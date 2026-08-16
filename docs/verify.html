@@ -40,11 +40,9 @@ cannot be quietly removed later without breaking every record after it.</p>
 <p>Verification walks the snapshot directory rather than trusting
 <span class="mono">CHAIN.jsonl</span> to list its own contents, and each
 snapshot's filename must match the session date inside it, which must in turn
-follow the one before. Those three checks were added after an audit: without
-the first, deleting the last lines of the chain file silently removed the most
-recent sessions &#8212; and a bad run is always at the end. Without the other
-two, a fabricated session could be appended under any date at all without
-recomputing a single existing hash.</p>
+follow the one before. Together these mean a session cannot be removed,
+reordered or invented: not the most recent ones, which is where a bad run would
+sit, and not an older one dropped in under a chosen date.</p>
 <p>From the project root: <span class="mono">python3 -m bese.verify</span></p>
 </div></div></section>
 
@@ -56,18 +54,17 @@ the corrections file &#8212; and those are what a reader actually reads. So each
 snapshot also pins their SHA-256 digests, and
 <span class="mono">meta.json</span> is pinned too, excluding the two fields
 derived from the chain itself.</p>
-<p>The audit that prompted this flipped a losing session to a winner in
-<span class="mono">nav.csv</span> and deleted six of thirteen rows from
-<span class="mono">trades.csv</span>; verification reported the record intact
-both times. It now fails on either. The same command also checks that the copy
-served by this website is byte-identical to the copy in the repository.</p>
+<p>So altering a figure in <span class="mono">nav.csv</span>, or removing rows
+from <span class="mono">trades.csv</span>, fails verification. The same command
+also checks that the copy served by this website is byte-identical to the copy
+in the repository.</p>
 </div></div></section>
 
 <section class="blk"><div class="rail"><h2>4. Recomputation</h2><div class="note">The numbers follow from the inputs.</div></div><div class="body"><div class="prose">
 <p><span class="mono">nav.csv</span> is the whole equity curve. Every published
 metric is computed from it by
-<span class="mono">bese.metrics.compute_core_metrics</span> &#8212; which, unlike
-the system this is modelled on, is published. Recompute and compare.</p></div><pre>import csv
+<span class="mono">bese.metrics.compute_core_metrics</span>, which is published
+in this repository. Recompute and compare.</p></div><pre>import csv
 nav = list(csv.DictReader(open(&quot;books/bese_nominal_100k/nav.csv&quot;)))
 print(float(nav[-1][&quot;equity&quot;]) / float(nav[0][&quot;equity&quot;]) - 1)</pre></div></section>
 

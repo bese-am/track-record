@@ -31,15 +31,14 @@ def reset_account_labels() -> None:
 def account_ref(account: str | None) -> str | None:
     """A stable, non-identifying reference to an account.
 
-    A HASH of the identifier is not good enough, which is the mistake this
-    replaces. The firm issues identifiers of a known shape -- a fixed
+    A HASH of the identifier is not sufficient. The firm issues identifiers of a known shape -- a fixed
     alphabetic prefix and nine digits -- so the whole space is about 10^9
     candidates, and the record names the firm in its own `source` column.
     SHA-256 is fast by design: that space sweeps in minutes on a laptop and
     under a second on a GPU. Publishing the hash of a low-entropy identifier
     publishes the identifier.
 
-    So the published reference carries no preimage at all. Accounts are
+    So the published reference carries no preimage. Accounts are
     labelled in the order they first appear, which preserves everything the
     record actually claims -- that two trades came from the same account, and
     that the series survived an account being replaced -- and reveals nothing
