@@ -25,6 +25,7 @@ Usage:
     python3 autopublish.py              # normal scheduled run
     python3 autopublish.py --dry-run    # rebuild, report, write nothing
     python3 autopublish.py --push       # also git commit and push
+    python3 autopublish.py --render-only   # re-render the site, chain nothing
 """
 
 from __future__ import annotations
@@ -106,6 +107,86 @@ def sweep_inbox(dry: bool) -> int:
             shutil.move(str(f), dest)
         moved += 1
     return moved
+
+
+def render_only(args) -> None:
+    """Re-render the site from the record already published. Chains nothing.
+
+    The publisher rebuilds every published file from the archive and aborts if
+    anything moved under an already-chained session. That is the right answer
+    for data and the wrong answer for presentation, because it means the site a
+    stranger reads can only change on days the operator happened to trade.
+
+    So this path reads the record as published and writes only two things: the
+    rendered pages, which the chain does not cover and never has, and the
+    disclosure list in `index.json`, which the chain also does not pin. A
+    disclosure is a warning addressed to the reader; withholding one until the
+    next session would be exactly the wrong way round. What each snapshot
+    disclosed when it was chained stays inside that snapshot, unchanged, so the
+    record still says what was disclosed and when.
+
+    Every pinned file is compared before and after. If this path has somehow
+    modified one, it puts the bytes back and refuses.
+    """
+    log("=" * 62)
+    log("Bese publisher run  (render only -- the record is not rebuilt)")
+
+    if not (REPO / "index.json").exists():
+        die("nothing published yet -- run a full publish first")
+
+    before = {p: p.read_bytes() for p in sorted(REPO.rglob("*")) if p.is_file()}
+
+    log("1. refreshing what the chain does not pin")
+    idx = json.loads((REPO / "index.json").read_text(encoding="utf-8"))
+    if idx.get("disclosures") == DISCLOSURES:
+        log(f"  disclosures unchanged ({len(DISCLOSURES)} published)")
+    else:
+        was = len(idx.get("disclosures") or [])
+        idx["disclosures"] = DISCLOSURES
+        (REPO / "index.json").write_text(
+            json.dumps(idx, indent=2, sort_keys=True, allow_nan=False,
+                       default=str) + "\n", encoding="utf-8", newline="\n")
+        log(f"  disclosures {was} -> {len(DISCLOSURES)}")
+
+    touched = [p for p, b in before.items()
+               if p.name != "index.json" and p.read_bytes() != b]
+    if touched:
+        for p in touched:
+            p.write_bytes(before[p])
+        die("render-only modified a chained file -- reverted, nothing written")
+
+    log("2. rendering the site")
+    pages = site_builder.build(REPO, SITE)
+    log(f"  {len(pages)} pages -> {SITE}")
+
+    # The proof of the claim in the docstring: every digest the snapshots
+    # pinned still matches, and the copy the website serves is byte-identical
+    # to the copy in the repository.
+    log("3. re-verifying the record, untouched")
+    ok, notes = verify(REPO)
+    if not ok:
+        for n in notes:
+            log(f"  {n}")
+        die("the published chain does not verify")
+    log(f"  {notes[0]}")
+
+    if args.push:
+        log("4. publishing to git")
+        try:
+            subprocess.run(["git", "add", "-A", "data/repo", "docs"],
+                           cwd=ROOT, check=True)
+            if subprocess.run(["git", "diff", "--cached", "--quiet"],
+                              cwd=ROOT).returncode == 0:
+                log("  no change to publish")
+            else:
+                subprocess.run(["git", "commit", "-m",
+                                "render: rebuild the site from the published record"],
+                               cwd=ROOT, check=True)
+                subprocess.run(["git", "push"], cwd=ROOT, check=True)
+                log("  pushed")
+        except subprocess.CalledProcessError as e:
+            log(f"  git failed ({e}) -- files are written; push by hand")
+    log("done")
 
 
 def timestamps_only(args) -> None:
@@ -211,10 +292,15 @@ def main() -> None:
     ap.add_argument("--no-site", action="store_true")
     ap.add_argument("--timestamps-only", action="store_true",
                     help="mature the OpenTimestamps proofs and nothing else")
+    ap.add_argument("--render-only", action="store_true",
+                    help="re-render the site from the published record, "
+                         "rebuilding and chaining nothing")
     args = ap.parse_args()
 
     if args.timestamps_only:
         return timestamps_only(args)
+    if args.render_only:
+        return render_only(args)
 
     log("=" * 62)
     log(f"Besë publisher run  (dry-run={args.dry_run})")
