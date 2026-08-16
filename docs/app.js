@@ -8,7 +8,8 @@ document.querySelectorAll('.hit').forEach(el=>{
   tip.replaceChildren(Object.assign(document.createElement('b'),
   {textContent:el.dataset.title}),document.createTextNode(el.dataset.body));tip.style.opacity='1';});
  el.addEventListener('mousemove',e=>{
-  tip.style.left=Math.min(e.clientX+14,innerWidth-250)+'px';
+  const tw=tip.offsetWidth||230;
+  tip.style.left=Math.max(8,Math.min(e.clientX+14,innerWidth-tw-8))+'px';
   tip.style.top=(e.clientY-12)+'px';});
  el.addEventListener('mouseleave',()=>{tip.style.opacity='0';
   document.querySelectorAll('.cross,.focus').forEach(n=>n.style.display='none');});

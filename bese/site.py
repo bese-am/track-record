@@ -34,6 +34,7 @@ OWNER_URL = "https://github.com/kkacajj"
 
 import csv
 import html
+import math
 import json
 import shutil
 from datetime import datetime
@@ -44,6 +45,41 @@ MONTHS = ["", "January", "February", "March", "April", "May", "June", "July",
 
 W = 900
 PAD_L, PAD_R, PAD_T, PAD_B = 58, 6, 10, 26
+
+#: An SVG scales as one piece: shrink it to a phone and the type shrinks with
+#: it. A 900-unit chart rendered into 354 CSS pixels puts 10.5px labels on
+#: screen at 4px, which is not small type, it is no type. So every chart is
+#: emitted twice -- once at 900 units for wide screens, once at 430 for narrow
+#: -- and CSS shows whichever fits. The alternative, one drawing that stretches,
+#: cannot work: nothing in CSS reaches inside a viewBox to resize the text.
+W_NARROW = 430
+PAD_L_NARROW = 46
+PAD_R_NARROW = 22
+
+
+def label_every(n, usable, label_px=44):
+    """How many x labels to skip so they do not collide.
+
+    Matters beyond phones. At 60 sessions even a wide chart cannot fit 60 dates
+    across, so this thins them everywhere rather than letting the axis turn to
+    mush as the record grows. With today's handful of sessions it returns 1 and
+    changes nothing.
+    """
+    if n <= 1:
+        return 1
+    per = usable / n
+    return max(1, math.ceil(label_px / per)) if per > 0 else 1
+
+
+def dual(fn, *args, cid=None):
+    """Render a chart at both widths; CSS picks one."""
+    wide, narrow = {}, {"w": W_NARROW, "pad_l": PAD_L_NARROW,
+                       "pad_r": PAD_R_NARROW}
+    if cid is not None:
+        wide["cid"] = cid
+        narrow["cid"] = cid + "-m"      # ids must stay unique across both
+    return (f'<div class="c-wide">{fn(*args, **wide)}</div>'
+            f'<div class="c-narrow">{fn(*args, **narrow)}</div>')
 
 
 # ------------------------------------------------------------- formatting ---
@@ -99,7 +135,7 @@ def rebase(nav):
 
 # ----------------------------------------------------------------- charts ---
 
-def cumulative_chart(nav, cid="nav"):
+def cumulative_chart(nav, cid="nav", w=W, pad_l=PAD_L, pad_r=PAD_R):
     """Cumulative return. The axis is percent, not currency.
 
     A dollar axis on a nominal base invites the reader to think the number is a
@@ -114,20 +150,21 @@ def cumulative_chart(nav, cid="nav"):
     n = len(nav)
 
     def px(i):
-        return scale(i, 0, max(n - 1, 1), PAD_L, W - PAD_R)
+        return scale(i, 0, max(n - 1, 1), pad_l, w - pad_r)
 
     def py(v):
         return scale(v, lo, hi, h - PAD_B, PAD_T)
 
+    every = label_every(n, w - pad_l - PAD_R)
     tvals = [lo + (hi - lo) * k / 4 for k in range(5)]
     # The zero line is the reference the whole chart is read against, so it gets
     # a label rather than being an unexplained rule near an arbitrary tick.
     tvals[min(range(5), key=lambda k: abs(tvals[k]))] = 0.0
     ticks = "".join(
-        f'<text class="ax" x="{PAD_L-12}" y="{py(t)+3.5:.1f}" text-anchor="end">'
+        f'<text class="ax" x="{pad_l-12}" y="{py(t)+3.5:.1f}" text-anchor="end">'
         f'{t*100:.2f}%</text>' for t in tvals)
     zero = py(0.0)
-    ticks += (f'<line class="zero" x1="{PAD_L}" x2="{W-PAD_R}" '
+    ticks += (f'<line class="zero" x1="{pad_l}" x2="{w-pad_r}" '
               f'y1="{zero:.1f}" y2="{zero:.1f}"/>')
 
     pts = " L".join(f"{px(i):.1f} {py(v):.1f}" for i, v in enumerate(ys))
@@ -136,7 +173,8 @@ def cumulative_chart(nav, cid="nav"):
                    for i, v in enumerate(ys))
     labels = "".join(
         f'<text class="ax" x="{px(i):.1f}" y="{h-PAD_B+17}" text-anchor="middle">'
-        f'{day(p["date"])}</text>' for i, p in enumerate(nav))
+        f'{day(p["date"])}</text>' for i, p in enumerate(nav)
+        if i % every == 0 or i == n - 1)
     hits = "".join(
         f'<rect class="hit" x="{px(i)-18:.1f}" y="{PAD_T}" width="36" '
         f'height="{h-PAD_T-PAD_B}" data-c="{cid}" data-x="{px(i):.1f}" '
@@ -147,7 +185,7 @@ def cumulative_chart(nav, cid="nav"):
            else " &#183; inception") + '"/>'
         for i, (p, v) in enumerate(zip(nav, ys, strict=True)))
 
-    return f'''<svg viewBox="0 0 {W} {h}" class="chart" id="{cid}">
+    return f'''<svg viewBox="0 0 {w} {h}" class="chart" id="{cid}">
 <defs><linearGradient id="g{cid}" x1="0" y1="0" x2="0" y2="1">
 <stop offset="0%" stop-color="var(--accent)" stop-opacity=".16"/>
 <stop offset="100%" stop-color="var(--accent)" stop-opacity=".01"/></linearGradient></defs>
@@ -156,7 +194,7 @@ def cumulative_chart(nav, cid="nav"):
 <circle class="focus" id="f-{cid}" r="4" style="display:none"/>{hits}</svg>'''
 
 
-def returns_chart(daily):
+def returns_chart(daily, w=W, pad_l=PAD_L, pad_r=PAD_R):
     """Session returns.
 
     Colour carries the sign, and so does the signed label above every bar.
@@ -170,12 +208,13 @@ def returns_chart(daily):
     m = max(abs(min(vals)), abs(max(vals))) * 1.35 or 1
     zero = scale(0, -m, m, h - pb, pt)
     n = len(daily)
-    bw = min(30, (W - PAD_L - PAD_R) / max(n, 1) * 0.5)
+    bw = min(30, (w - pad_l - PAD_R) / max(n, 1) * 0.5)
 
     def px(i):
-        return scale(i, 0, max(n - 1, 1), PAD_L + 18, W - PAD_R - 18)
+        return scale(i, 0, max(n - 1, 1), pad_l + 18, w - pad_r - 18)
 
-    out = (f'<line class="zero" x1="{PAD_L}" x2="{W-PAD_R}" y1="{zero:.1f}" '
+    every = label_every(n, w - pad_l - PAD_R, 52)
+    out = (f'<line class="zero" x1="{pad_l}" x2="{w-pad_r}" y1="{zero:.1f}" '
            f'y2="{zero:.1f}"/>')
     for i, d in enumerate(daily):
         v = d["return"]
@@ -188,26 +227,29 @@ def returns_chart(daily):
                 f'width="{bw:.1f}" height="{max(hh,1.2):.1f}"/>'
                 f'<text class="val {c}" x="{px(i):.1f}" '
                 f'y="{(top-6) if v>=0 else (top+hh+13):.1f}" text-anchor="middle">'
-                f'{v*100:+.2f}%</text>'
-                f'<text class="ax" x="{px(i):.1f}" y="{h-pb+17}" '
-                f'text-anchor="middle">{day(d["date"])}</text>')
-    return f'<svg viewBox="0 0 {W} {h}" class="chart">{out}</svg>'
+                f'{v*100:+.2f}%</text>')
+        if i % every == 0 or i == n - 1:
+            out += (f'<text class="ax" x="{px(i):.1f}" y="{h-pb+17}" '
+                    f'text-anchor="middle">{day(d["date"])}</text>')
+    return f'<svg viewBox="0 0 {w} {h}" class="chart">{out}</svg>'
 
 
-def drawdown_chart(dd):
+def drawdown_chart(dd, w=W, pad_l=PAD_L, pad_r=PAD_R):
     h, pt, pb = 180, 12, 26
     vals = [d["drawdown"] for d in dd]
     lo = min(min(vals) * 1.45, -0.0005)
     n = len(dd)
 
+    every = label_every(n, w - pad_l - PAD_R)
+
     def px(i):
-        return scale(i, 0, max(n - 1, 1), PAD_L, W - PAD_R)
+        return scale(i, 0, max(n - 1, 1), pad_l, w - pad_r)
 
     def py(v):
         return scale(v, lo, 0, h - pb, pt)
 
     ticks = "".join(
-        f'<text class="ax" x="{PAD_L-12}" y="{py(t)+3.5:.1f}" text-anchor="end">'
+        f'<text class="ax" x="{pad_l-12}" y="{py(t)+3.5:.1f}" text-anchor="end">'
         f'{t*100:.2f}%</text>' for t in [lo * k / 3 for k in range(4)])
     pts = " L".join(f"{px(i):.1f} {py(v):.1f}" for i, v in enumerate(vals))
     area = f"M{px(0):.1f} {py(0):.1f} L{pts} L{px(n-1):.1f} {py(0):.1f} Z"
@@ -217,35 +259,38 @@ def drawdown_chart(dd):
            f'{vals[trough]*100:.2f}%</text>')
     labels = "".join(
         f'<text class="ax" x="{px(i):.1f}" y="{h-pb+17}" text-anchor="middle">'
-        f'{day(d["date"])}</text>' for i, d in enumerate(dd))
-    return (f'<svg viewBox="0 0 {W} {h}" class="chart">'
-            f'<line class="zero" x1="{PAD_L}" x2="{W-PAD_R}" y1="{py(0):.1f}" '
+        f'{day(d["date"])}</text>' for i, d in enumerate(dd)
+        if i % every == 0 or i == n - 1)
+    return (f'<svg viewBox="0 0 {w} {h}" class="chart">'
+            f'<line class="zero" x1="{pad_l}" x2="{w-pad_r}" y1="{py(0):.1f}" '
             f'y2="{py(0):.1f}"/>{ticks}'
             f'<path d="{area}" class="dd-fill"/><path class="dd-line" d="M{pts}"/>'
             f'{lbl}{labels}</svg>')
 
 
-def distribution_chart(bins):
+def distribution_chart(bins, w=W, pad_l=PAD_L, pad_r=PAD_R):
     if not bins:
         return '<p class="empty">Not enough sessions to bin.</p>'
     h, pt, pb = 160, 14, 30
     top = max(b["count"] for b in bins) or 1
     n = len(bins)
-    bw = (W - PAD_L - PAD_R) / n * 0.72
+    bw = (w - pad_l - PAD_R) / n * 0.72
+    every = label_every(n, w - pad_l - PAD_R, 46)
     out = ""
     for i, b in enumerate(bins):
-        x = scale(i, 0, max(n - 1, 1), PAD_L + bw / 2, W - PAD_R - bw / 2)
+        x = scale(i, 0, max(n - 1, 1), pad_l + bw / 2, w - pad_r - bw / 2)
         hh = (b["count"] / top) * (h - pt - pb)
         mid = (b["from"] + b["to"]) / 2
         out += (f'<rect class="bar {"up" if mid >= 0 else "down"}" '
                 f'x="{x-bw/2:.1f}" y="{h-pb-hh:.1f}" width="{bw:.1f}" '
                 f'height="{max(hh,1):.1f}"/>'
                 f'<text class="val" x="{x:.1f}" y="{h-pb-hh-6:.1f}" '
-                f'text-anchor="middle">{b["count"]}</text>'
-                f'<text class="ax" x="{x:.1f}" y="{h-pb+17}" text-anchor="middle">'
-                f'{mid*100:+.2f}%</text>')
-    return (f'<svg viewBox="0 0 {W} {h}" class="chart">'
-            f'<line class="zero" x1="{PAD_L}" x2="{W-PAD_R}" y1="{h-pb}" '
+                f'text-anchor="middle">{b["count"]}</text>')
+        if i % every == 0 or i == n - 1:
+            out += (f'<text class="ax" x="{x:.1f}" y="{h-pb+17}" '
+                    f'text-anchor="middle">{mid*100:+.2f}%</text>')
+    return (f'<svg viewBox="0 0 {w} {h}" class="chart">'
+            f'<line class="zero" x1="{pad_l}" x2="{w-pad_r}" y1="{h-pb}" '
             f'y2="{h-pb}"/>{out}</svg>')
 
 
@@ -312,6 +357,7 @@ line-height:1;font-variant-numeric:tabular-nums}
 .kpi .n{margin-top:7px;font-size:12px;color:var(--fg-faint)}
 
 .chart{width:100%;height:auto;display:block;overflow:visible}
+.c-narrow{display:none}
 .ax{fill:var(--fg-faint);font-size:10.5px;font-variant-numeric:tabular-nums}
 .zero{stroke:var(--hairline);stroke-width:1}
 .line{fill:none;stroke:var(--accent);stroke-width:1.6;stroke-linejoin:round;
@@ -342,6 +388,8 @@ font-size:13px;font-variant-numeric:tabular-nums}
 svg .up,svg .down{color:inherit}
 
 table{width:100%;border-collapse:collapse;font-size:12px}
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tw table{min-width:max-content}
 th{text-align:left;font-weight:600;font-size:10px;letter-spacing:.07em;
 text-transform:uppercase;color:var(--fg-faint);padding:0 10px 7px 0;
 border-bottom:1px solid var(--hairline);white-space:nowrap}
@@ -365,6 +413,35 @@ font-size:12.5px;line-height:1.6;margin:18px 0 0}
   border-bottom-color:color-mix(in srgb,var(--accent) 35%,transparent)}
 .prose p.links{display:flex;flex-wrap:wrap;gap:18px;margin-top:16px}
 .prose p.links a{font-size:12.5px;letter-spacing:.01em}
+/* ---------------------------------------------------------------- phones ---
+   Below 640px the two-column section grid has already collapsed; what is left
+   is the header, which ran off the side, and the charts, whose type was being
+   scaled into illegibility. */
+@media(max-width:640px){
+  .wrap{padding:26px 18px 56px}
+  /* Brand on its own line, navigation on the next, scrolled sideways if it
+     does not fit. Wrapping it to two rows instead would push the content of
+     every page down by another line on the smallest screens. */
+  .top .in{flex-direction:column;align-items:stretch;gap:0;height:auto;
+    padding:10px 0 0}
+  .brand{padding:0 18px 8px}
+  .top nav{margin-left:0;flex-wrap:wrap;gap:6px 18px;padding:0 18px 9px}
+  .top nav a{white-space:nowrap;font-size:12px}
+  .c-wide{display:none}
+  .c-narrow{display:block}
+  /* The pointer tooltip is a hover affordance. On a touch screen a tap fires
+     it, then nothing dismisses it, and it covers the very point it describes.
+     The value it carries is already in the tables below. */
+  .hit{display:none}
+  .tip{display:none}
+  .kpi .v{font-size:23px}
+  h1{font-size:29px}
+  pre{font-size:11px;padding:11px 12px}
+  section.blk{padding-top:22px;margin-top:22px}
+}
+@media(max-width:380px){
+  .kpis{grid-template-columns:1fr}
+}
 pre{background:var(--bg-subtle);padding:13px 15px;overflow-x:auto;
 font-size:11px;line-height:1.55;
 font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin:0 0 11px}
@@ -390,7 +467,8 @@ document.querySelectorAll('.hit').forEach(el=>{
   tip.replaceChildren(Object.assign(document.createElement('b'),
   {textContent:el.dataset.title}),document.createTextNode(el.dataset.body));tip.style.opacity='1';});
  el.addEventListener('mousemove',e=>{
-  tip.style.left=Math.min(e.clientX+14,innerWidth-250)+'px';
+  const tw=tip.offsetWidth||230;
+  tip.style.left=Math.max(8,Math.min(e.clientX+14,innerWidth-tw-8))+'px';
   tip.style.top=(e.clientY-12)+'px';});
  el.addEventListener('mouseleave',()=>{tip.style.opacity='0';
   document.querySelectorAll('.cross,.focus').forEach(n=>n.style.display='none');});
@@ -415,6 +493,17 @@ def kpi(label, value, note=""):
             f'<div class="v">{value}</div>{n}</div>')
 
 
+def scrollable_tables(body: str) -> str:
+    """Wrap every table so it scrolls inside its own box.
+
+    Done centrally rather than at each call site: a table added later would
+    otherwise silently reintroduce the bug, and the failure is invisible on a
+    desktop where the author is looking.
+    """
+    return body.replace("<table", '<div class="tw"><table', -1) \
+               .replace("</table>", "</table></div>", -1)
+
+
 def shell(title: str, active: str, body: str, published: str) -> str:
     nav = "".join(f'<a href="{h}"{" class=on" if h == active else ""}>{t}</a>'
                   for h, t in PAGES)
@@ -425,7 +514,7 @@ def shell(title: str, active: str, body: str, published: str) -> str:
 <header class="top"><div class="in">
 <a class="brand" href="index.html">Besë <span>Asset Management</span></a>
 <nav>{nav}</nav></div></header>
-<div class="wrap">{body}
+<div class="wrap">{scrollable_tables(body)}
 <div class="foot">
 <p><b>Nominal capital, not assets under management.</b> $100,000 is a stated
 normalisation base. It is not client money, and no prop firm's advertised
@@ -472,7 +561,7 @@ def landing(idx, meta, metrics, nav):
                   "each hashed to the one before")
             + "</div>")
 
-    chart = (cumulative_chart(nav)
+    chart = (dual(cumulative_chart, nav, cid="nav")
              + '<p class="notice">Cumulative return since inception. Exposure is '
                'held at 1 NQ-equivalent regardless of NAV, so the strategy is '
                'constant-notional while the return series compounds exactly. '
@@ -628,7 +717,7 @@ def portfolio(meta, metrics, analytics, nav, trades):
             + kpi("Exposure", "1 NQ-eq", "constant-notional")
             + "</div>")
 
-    dd = (drawdown_chart(analytics["drawdown"])
+    dd = (dual(drawdown_chart, analytics["drawdown"])
           + f'<table style="margin-top:20px"><thead><tr><th>Start</th>'
             f'<th>Trough</th><th>Recovered</th><th class="n">Sessions</th>'
             f'<th class="n">Depth</th><th>State</th></tr></thead>'
@@ -657,14 +746,14 @@ def portfolio(meta, metrics, analytics, nav, trades):
 <h1>{esc(meta['label'])}</h1>
 <p class="lede">{esc(meta['tagline_en'])}.</p>
 {sec("Position", kpis, first=True)}
-{sec("Cumulative return", cumulative_chart(nav),
+{sec("Cumulative return", dual(cumulative_chart, nav, cid="nav"),
      note="Previous nominal NAV plus standardised 1&#8209;NQ profit and loss, "
           "rebased on inception.")}
 {sec("Statistics", f'<div class="ledger">{ledger}</div>{gate_note}',
      note="Withheld is not zero. Every figure is computed by "
           "<span class='mono'>bese.metrics</span> and read from "
           "<span class='mono'>metrics.json</span>.")}
-{sec("Session returns", returns_chart(analytics["daily_returns"]),
+{sec("Session returns", dual(returns_chart, analytics["daily_returns"]),
      note="Each session's return on the nominal base.")}
 {sec("Drawdown", dd,
      note="From the peak of the nominal NAV. Maximum drawdown as a published "
@@ -675,7 +764,7 @@ def portfolio(meta, metrics, analytics, nav, trades):
      f'<th class="n">Return</th><th></th></tr></thead><tbody>{mrows}</tbody></table>',
      note="Daily returns compounded within each calendar month. A month still "
           "running is labelled partial.")}
-{sec("Distribution", distribution_chart(analytics["distribution"]["bins"]),
+{sec("Distribution", dual(distribution_chart, analytics["distribution"]["bins"]),
      note=f'Min {spct(q["min"], 3)}, 25th {spct(q["q25"], 3)}, median '
           f'{spct(q["median"], 3)}, 75th {spct(q["q75"], 3)}, max '
           f'{spct(q["max"], 3)} over {esc(q["n"])} sessions.')}
