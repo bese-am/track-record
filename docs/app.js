@@ -5,7 +5,8 @@ document.querySelectorAll('.hit').forEach(el=>{
   const cr=document.getElementById('c-'+c),fo=document.getElementById('f-'+c);
   if(cr){cr.setAttribute('x1',x);cr.setAttribute('x2',x);cr.style.display='';}
   if(fo){fo.setAttribute('cx',x);fo.setAttribute('cy',y);fo.style.display='';}
-  tip.innerHTML='<b>'+el.dataset.title+'</b>'+el.dataset.body;tip.style.opacity='1';});
+  tip.replaceChildren(Object.assign(document.createElement('b'),
+  {textContent:el.dataset.title}),document.createTextNode(el.dataset.body));tip.style.opacity='1';});
  el.addEventListener('mousemove',e=>{
   tip.style.left=Math.min(e.clientX+14,innerWidth-250)+'px';
   tip.style.top=(e.clientY-12)+'px';});

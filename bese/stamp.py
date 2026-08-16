@@ -40,7 +40,6 @@ import hashlib
 import json
 import shutil
 import subprocess
-from datetime import datetime, timezone
 from pathlib import Path
 
 CALENDAR_TIMEOUT = 90
@@ -142,11 +141,14 @@ def archive_manifest(archive_dir: Path, out_path: Path) -> dict:
                  "account identifier — but they are committed to here, so any "
                  "one of them can later be produced and shown to be the file "
                  "held on this date."),
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        # No wall-clock stamp. This file is pinned by the hash chain, so a
+        # timestamp inside it would change its digest on every run and break
+        # the pin for no reason -- and when the record was published is what
+        # CHAIN.jsonl's `ts` and the OpenTimestamps proofs are for.
         "files": files,
         "count": len(files),
     }
     out_path.write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        json.dumps(manifest, indent=2, sort_keys=True, allow_nan=False) + "\n",
         encoding="utf-8", newline="\n")
     return manifest

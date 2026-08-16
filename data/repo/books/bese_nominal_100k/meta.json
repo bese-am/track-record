@@ -1,11 +1,11 @@
 {
   "account_continuity": "The series is built from trades, not from account equity, so replacing an account does not reset it.",
-  "account_numbers": null,
-  "account_refs": [
-    "sha256:002c450e3e3a4227"
+  "account_labels": [
+    "account 1"
   ],
+  "account_numbers": null,
   "book": "bese_nominal_100k",
-  "chain_head": "d3e9be995c79e09a83a334aa56610a6b61c6eb154314ae2aeca1e0b86d3231fa",
+  "chain_head": "62436b6e0e00bbd59c28f2c9a7f5399ef984e3b3a4397d3b8f083d6678c3d9b2",
   "copy_dedup_rule": "One leader account is the source; copies to follower accounts are not counted again.",
   "cost_basis": {
     "modelled": 0,
@@ -41,7 +41,7 @@
   "min_sessions_for_annualised": 60,
   "nominal_capital": 100000.0,
   "overrides_applied": 0,
-  "published_at": "2026-08-15T23:46:19.589510+00:00",
+  "published_at": "2026-08-16T00:53:23.297796+00:00",
   "rate_card": {
     "MNQ": 1.5,
     "NQ": 4.5
@@ -56,7 +56,7 @@
     "method": null,
     "note": "ots client not installed \u2014 snapshots are chained but NOT timestamped. Install opentimestamps-client to close this.",
     "pending": 0,
-    "proves": "each record existed at or before the anchoring block; combined with the chain, the series can be neither back-dated nor silently shortened",
+    "proves": "nothing yet: no proofs are attached. The chain shows the series is internally consistent and complete relative to itself; it does not show when it was built.",
     "snapshots": 6
   },
   "trades": 13

@@ -14,5 +14,9 @@ __pycache__/
 data/inbox/
 data/archive/
 data/tpt/
+# data/raw/ was the gap: three raw-export directories were listed and a
+# fourth existed, so an export sat in the public repo while the manifest,
+# the Verify page and the README all said the raw files were not published.
+data/raw/
 data/publish.log
 data/cron.log

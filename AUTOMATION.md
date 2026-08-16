@@ -68,7 +68,7 @@ A run with an empty inbox and no new data is harmless: it rebuilds, confirms not
 
 ## What still needs you
 
-Only the thing that genuinely needs judgement: **review flags.** When two same-direction trades in one instrument sit minutes apart and share no fill ID, the publisher cannot tell a deliberate scale-in from two separate re-entries. It flags them, never merges them, and says so at the end of the run. You resolve it once in a committed `overrides.yaml`, and it stays resolved.
+Only the thing that genuinely needs judgement: **review flags.** When two same-direction trades in one instrument sit minutes apart and share no fill ID, the publisher cannot tell a deliberate scale-in from two separate re-entries. It flags them, never merges them, and says so at the end of the run. You resolve it once in a committed `overrides.json`, and it stays resolved.
 
 Four are outstanding in the current record (08-11 and 08-13).
 

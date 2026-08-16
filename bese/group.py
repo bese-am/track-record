@@ -22,6 +22,7 @@ by an explicit, published override.
 
 from __future__ import annotations
 
+import bisect
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
@@ -29,6 +30,10 @@ from .model import Leg
 
 #: Two same-direction legs in one contract whose lifetimes nearly touch are
 #: *flagged*, never auto-merged.
+MAX_REVIEW_FLAGS = 8
+#: Hard stop on the pair scan for one trade. Beyond this the answer is
+#: "a lot", and enumerating the rest only costs time on an unattended job.
+SCAN_CAP = 200
 REVIEW_WINDOW = timedelta(minutes=5)
 
 
@@ -165,16 +170,48 @@ def _flag_review_candidates(trades: list[Trade]) -> None:
     Advisory only. Nothing here changes a number; it changes what the operator
     is asked to look at.
     """
+    # The rule is unchanged: flag b against a when b opens no later than
+    # REVIEW_WINDOW after a closes -- i.e. the two positions overlap or abut.
+    # Two things about the old implementation were wrong.
+    #
+    # The `break` tested `b.opened_at`, but the list is sorted by `closed_at`,
+    # so `opened_at` is not monotonic and the break fired almost never. The
+    # scan is now bounded by a bisect over an open-time index, which IS
+    # monotonic, so the early exit is sound rather than decorative.
+    #
+    # And the output was uncapped. Positions opened together and closed apart
+    # legitimately flag every pair, so 800 such trades produced 640k notes and
+    # wrote 23 MB of flag text into trades.csv -- on a job that runs
+    # unattended. The cap keeps that bounded; a truncated trade says so in its
+    # own flags rather than quietly showing a short list.
+    order = sorted(range(len(trades)), key=lambda k: trades[k].opened_at)
+    opens = [trades[k].opened_at for k in order]
+    seen: list[set] = [set() for _ in trades]
+
     for i, a in enumerate(trades):
-        for b in trades[i + 1:]:
-            if b.opened_at - a.closed_at > REVIEW_WINDOW:
+        hi = bisect.bisect_right(opens, a.closed_at + REVIEW_WINDOW)
+        for pos in range(hi):
+            if len(seen[i]) >= SCAN_CAP:
                 break
+            j = order[pos]
+            if j <= i:
+                continue
+            b = trades[j]
             if a.root != b.root or a.direction != b.direction:
                 continue
-            for x, y in ((a, b), (b, a)):
+            for x, y, k in ((a, b, i), (b, a, j)):
                 note = f"possible_scale_with:{y.trade_id}"
-                if note not in x.flags:
+                if note in seen[k]:
+                    continue
+                seen[k].add(note)
+                if len(seen[k]) <= MAX_REVIEW_FLAGS:
                     x.flags.append(note)
+
+    for k, t in enumerate(trades):
+        n = len(seen[k])
+        if n > MAX_REVIEW_FLAGS:
+            t.flags.append(
+                f"scale_candidates_truncated:{n}{'+' if n >= SCAN_CAP else ''}")
 
 
 def apply_overrides(trades: list[Trade], overrides: dict) -> list[Trade]:

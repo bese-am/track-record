@@ -376,7 +376,8 @@ document.querySelectorAll('.hit').forEach(el=>{
   const cr=document.getElementById('c-'+c),fo=document.getElementById('f-'+c);
   if(cr){cr.setAttribute('x1',x);cr.setAttribute('x2',x);cr.style.display='';}
   if(fo){fo.setAttribute('cx',x);fo.setAttribute('cy',y);fo.style.display='';}
-  tip.innerHTML='<b>'+el.dataset.title+'</b>'+el.dataset.body;tip.style.opacity='1';});
+  tip.replaceChildren(Object.assign(document.createElement('b'),
+  {textContent:el.dataset.title}),document.createTextNode(el.dataset.body));tip.style.opacity='1';});
  el.addEventListener('mousemove',e=>{
   tip.style.left=Math.min(e.clientX+14,innerWidth-250)+'px';
   tip.style.top=(e.clientY-12)+'px';});
@@ -454,9 +455,9 @@ def landing(idx, meta, metrics, nav):
                   f'{datetime.fromisoformat(meta["last_session"]).strftime("%d %b %Y")}')
             + kpi("Nominal NAV", money(nav[-1]["equity"]),
                   f'from {money(meta["nominal_capital"], 0)}')
-            + kpi("Sessions", str(meta["sessions"]),
-                  f'{meta["trades"]} strategy trades')
-            + kpi("Chained records", str(idx["chain"]["entries"]),
+            + kpi("Sessions", esc(meta["sessions"]),
+                  f'{esc(meta["trades"])} strategy trades')
+            + kpi("Chained records", esc(idx["chain"]["entries"]),
                   "each hashed to the one before")
             + "</div>")
 
@@ -495,7 +496,7 @@ the day it happens.</p>
 def portfolio(meta, metrics, analytics, nav, trades):
     v = metrics["values"]
     gate = metrics.get("insufficient_history")
-    held = f"withheld &#183; {gate['have']}/{gate['need']}" if gate else None
+    held = f"withheld &#183; {esc(gate['have'])}/{esc(gate['need'])}" if gate else None
 
     def row(label, value, raw=None, note=None, gated=False):
         cell = (f'<span class="held-inline">{held}</span>' if (gated and held)
@@ -508,8 +509,8 @@ def portfolio(meta, metrics, analytics, nav, trades):
             row("Net asset value", money(nav[-1]["equity"]), note="nominal basis"),
             row("Cumulative return", spct(v["cumulative_return"], 3),
                 v["cumulative_return"]),
-            row("Sessions published", str(meta["sessions"])),
-            row("Observations", str(v["n_obs"])),
+            row("Sessions published", esc(meta["sessions"])),
+            row("Observations", esc(v["n_obs"])),
         ]),
         ("Return", [
             row("Annualised return (CAGR)", pct(v["cagr"]), gated=v["cagr"] is None),
@@ -518,7 +519,8 @@ def portfolio(meta, metrics, analytics, nav, trades):
             row("Best session", spct(v["best_day"], 3), v["best_day"]),
             row("Worst session", spct(v["worst_day"], 3), v["worst_day"]),
             row("Winning sessions",
-                f'{v["positive_days"]} of {v["positive_days"] + v["negative_days"]}'),
+                f'{esc(v["positive_days"])} of '
+                f'{esc(v["positive_days"] + v["negative_days"])}'),
             row("Win rate", pct(v["win_rate"]), gated=v["win_rate"] is None),
         ]),
         ("Risk", [
@@ -571,15 +573,15 @@ def portfolio(meta, metrics, analytics, nav, trades):
             f'<td class="dim">{tags}</td></tr>')
 
     mrows = "".join(
-        f'<tr><td>{m["year"]}</td><td>{esc(MONTHS[m["month"]])}</td>'
-        f'<td class="n">{m["sessions"]}</td>'
+        f'<tr><td>{esc(m["year"])}</td><td>{esc(MONTHS[m["month"]])}</td>'
+        f'<td class="n">{esc(m["sessions"])}</td>'
         f'<td class="n strong {cls(m["return"])}">{spct(m["return"], 2)}</td>'
         f'<td class="dim">{"partial" if m["partial"] else ""}</td></tr>'
         for m in analytics["monthly_returns"])
 
     erows = "".join(
         f'<tr><td>{esc(e["start"])}</td><td>{esc(e["trough"])}</td>'
-        f'<td>{esc(e["recovered"] or "—")}</td><td class="n">{e["sessions"]}</td>'
+        f'<td>{esc(e["recovered"] or "—")}</td><td class="n">{esc(e["sessions"])}</td>'
         f'<td class="n strong down">{pct(e["depth"], 3)}</td>'
         f'<td class="dim">{"ongoing" if e["ongoing"] else "recovered"}</td></tr>'
         for e in analytics["drawdown_episodes"]
@@ -587,7 +589,7 @@ def portfolio(meta, metrics, analytics, nav, trades):
 
     q = analytics["quantiles"][0]
     inst = "".join(
-        f'<tr><td>{esc(k)}</td><td class="n">{d["trades"]}</td>'
+        f'<tr><td>{esc(k)}</td><td class="n">{esc(d["trades"])}</td>'
         f'<td class="n">{d["nq_equiv"]:g}</td>'
         f'<td class="n strong {cls(d["standardised_pnl"])}">'
         f'{d["standardised_pnl"]:+,.2f}</td></tr>'
@@ -597,7 +599,7 @@ def portfolio(meta, metrics, analytics, nav, trades):
     if gate:
         gate_note = (
             f'<p class="notice">Annualised statistics are withheld until '
-            f'{gate["need"]} sessions; this book has {gate["have"]}. On a handful '
+            f'{esc(gate["need"])} sessions; this book has {esc(gate["have"])}. On a handful '
             f'of sessions they are not imprecise estimates, they are meaningless '
             f'ones. What is shown from the first day &#8212; cumulative return, the '
             f'curve, best and worst session &#8212; are statements of what '
@@ -609,8 +611,8 @@ def portfolio(meta, metrics, analytics, nav, trades):
             + kpi("Net asset value", money(nav[-1]["equity"]),
                   f'nominal, from {money(meta["nominal_capital"], 0)}')
             + kpi("Sessions &#183; trades",
-                  f'{meta["sessions"]} &#183; {meta["trades"]}',
-                  f'{meta["min_sessions_for_annualised"] - meta["sessions"]} '
+                  f'{esc(meta["sessions"])} &#183; {esc(meta["trades"])}',
+                  f'{esc(meta["min_sessions_for_annualised"] - meta["sessions"])} '
                   f'more to ungate')
             + kpi("Exposure", "1 NQ-eq", "constant-notional")
             + "</div>")
@@ -636,7 +638,7 @@ def portfolio(meta, metrics, analytics, nav, trades):
             f'<dd>NQ {money(meta["cost_per_nq_equivalent"]["NQ"])} &#183; '
             f'MNQ {money(meta["cost_per_nq_equivalent"]["MNQ"])}</dd></div>'
             f'<div class="row"><dt>Costs from the firm&#39;s own figures</dt>'
-            f'<dd>{meta["cost_basis"]["reported"]} of {meta["trades"]}'
+            f'<dd>{esc(meta["cost_basis"]["reported"])} of {esc(meta["trades"])}'
             f' trades</dd></div>')
 
     return f"""
@@ -655,7 +657,7 @@ def portfolio(meta, metrics, analytics, nav, trades):
      note="Each session's return on the nominal base.")}
 {sec("Drawdown", dd,
      note="From the peak of the nominal NAV. Maximum drawdown as a published "
-          f"statistic stays withheld until {meta['min_sessions_for_annualised']} "
+          f"statistic stays withheld until {esc(meta['min_sessions_for_annualised'])} "
           "sessions.")}
 {sec("Monthly returns",
      f'<table><thead><tr><th>Year</th><th>Month</th><th class="n">Sessions</th>'
@@ -665,7 +667,7 @@ def portfolio(meta, metrics, analytics, nav, trades):
 {sec("Distribution", distribution_chart(analytics["distribution"]["bins"]),
      note=f'Min {spct(q["min"], 3)}, 25th {spct(q["q25"], 3)}, median '
           f'{spct(q["median"], 3)}, 75th {spct(q["q75"], 3)}, max '
-          f'{spct(q["max"], 3)} over {q["n"]} sessions.')}
+          f'{spct(q["max"], 3)} over {esc(q["n"])} sessions.')}
 {sec("Trade ledger",
      f'<table><thead><tr><th>Trade</th><th>Session</th><th>Symbol</th>'
      f'<th>Side</th><th class="n">Qty</th><th class="n">NQ eq.</th>'
@@ -704,8 +706,8 @@ def verify_page(idx, meta, chain):
             "few hours. <span class=\"mono\">ots upgrade</span> completes it; the "
             "publisher does this on every run. Incomplete means &#8220;not yet "
             "confirmed&#8221;, not &#8220;invalid&#8221;.</p>"
-            f"<p>{ts.get('confirmed', 0)} of {ts.get('snapshots', 0)} snapshots "
-            f"confirmed, {ts.get('pending', 0)} awaiting confirmation.</p></div>")
+            f"<p>{esc(ts.get('confirmed', 0))} of {esc(ts.get('snapshots', 0))} snapshots "
+            f"confirmed, {esc(ts.get('pending', 0))} awaiting confirmation.</p></div>")
 
     rows = "".join(
         f'<tr><td>{esc(e["session_date"])}</td>'
@@ -718,7 +720,8 @@ def verify_page(idx, meta, chain):
         'import hashlib, json, pathlib\n\n'
         'def canonical(payload):\n'
         '    return json.dumps(payload, sort_keys=True, indent=2,\n'
-        '                      ensure_ascii=False, default=str) + "\\n"\n\n'
+        '                      ensure_ascii=False, allow_nan=False,\n'
+        '                      default=str) + "\\n"\n\n'
         f'rec  = json.loads(pathlib.Path("{snap}")\n'
         '                  .read_text(encoding="utf-8"))\n'
         'body = {k: v for k, v in rec.items() if k != "hash"}\n'
@@ -751,12 +754,35 @@ the hash field removed. Change any published number and this fails.</p></div>'''
 {sec("2. Chaining", '''<div class="prose">
 <p>Each snapshot's <span class="mono">prev_hash</span> is the hash of the
 previous session; the first is 64 zeroes. A timestamp proves a file existed;
-only the chain proves the <b>series</b> is complete &#8212; so a losing day cannot
-be quietly removed later without breaking every record after it.</p>
+only the chain proves the <b>series</b> is complete &#8212; so a losing day
+cannot be quietly removed later without breaking every record after it.</p>
+<p>Verification walks the snapshot directory rather than trusting
+<span class="mono">CHAIN.jsonl</span> to list its own contents, and each
+snapshot's filename must match the session date inside it, which must in turn
+follow the one before. Those three checks were added after an audit: without
+the first, deleting the last lines of the chain file silently removed the most
+recent sessions &#8212; and a bad run is always at the end. Without the other
+two, a fabricated session could be appended under any date at all without
+recomputing a single existing hash.</p>
 <p>From the project root: <span class="mono">python3 -m bese.verify</span></p>
-</div>''', note="No session can be silently dropped.")}
+</div>''', note="No session can be silently dropped, or invented.")}
 
-{sec("3. Recomputation", '''<div class="prose">
+{sec("3. Coverage", '''<div class="prose">
+<p>A hash chain over the session records protects the session records. It does
+not, by itself, protect <span class="mono">nav.csv</span>,
+<span class="mono">trades.csv</span>, the metric files, the archive manifest or
+the corrections file &#8212; and those are what a reader actually reads. So each
+snapshot also pins their SHA-256 digests, and
+<span class="mono">meta.json</span> is pinned too, excluding the two fields
+derived from the chain itself.</p>
+<p>The audit that prompted this flipped a losing session to a winner in
+<span class="mono">nav.csv</span> and deleted six of thirteen rows from
+<span class="mono">trades.csv</span>; verification reported the record intact
+both times. It now fails on either. The same command also checks that the copy
+served by this website is byte-identical to the copy in the repository.</p>
+</div>''', note="Every published file is covered, not just the snapshots.")}
+
+{sec("4. Recomputation", '''<div class="prose">
 <p><span class="mono">nav.csv</span> is the whole equity curve. Every published
 metric is computed from it by
 <span class="mono">bese.metrics.compute_core_metrics</span> &#8212; which, unlike
@@ -764,7 +790,7 @@ the system this is modelled on, is published. Recompute and compare.</p></div>''
      + f"<pre>{nav_code}</pre>",
      note="The numbers follow from the inputs.")}
 
-{sec("4. Dating", f'''<div class="prose"><p>{ts_intro}</p></div>{ts_block}
+{sec("5. Dating", f'''<div class="prose"><p>{ts_intro}</p></div>{ts_block}
 <div class="prose">
 <p>What a timestamp proves is narrow and worth stating exactly: the file existed
 <em>at or before</em> that block. It does not prove the file did not exist
@@ -777,10 +803,11 @@ exit instant was written by the exchange and the firm, to the millisecond, in
 UTC. That is third-party attestation of when a trade happened, and nothing here
 improves on it.</p></div>''', note="The records were not back-dated.")}
 
-{sec("5. The exports", '''<div class="prose">
+{sec("6. The exports", '''<div class="prose">
 <p>The NAV is constructed from raw broker and firm exports, so those files are
-load-bearing evidence &#8212; but they carry the firm's account identifier and are
-not published. <span class="mono">archive_manifest.json</span> is the compromise:
+load-bearing evidence &#8212; but the firm's completed-trade export carries its
+account identifier, and a track record is a document strangers are invited to
+read closely, so the raw files are not published. <span class="mono">archive_manifest.json</span> is the compromise:
 it records the SHA-256 of every raw export the published record was built from.
 The files stay private, and if the record is ever challenged any one of them can
 be produced and shown to be the file held on the day. A hash costs nothing and
@@ -790,7 +817,7 @@ forecloses &#8220;you edited the source&#8221;.</p></div>''',
 {sec("The chain",
      f'<table><thead><tr><th>Session</th><th>Hash</th><th>Previous</th>'
      f'<th>Bytes on disk</th></tr></thead><tbody>{rows}</tbody></table>',
-     note=f'{idx["chain"]["entries"]} records. Head '
+     note=f'{esc(idx["chain"]["entries"])} records. Head '
           f'<span class="mono">{esc((meta.get("chain_head") or "—")[:20])}…</span>')}
 
 {sec("What it proves", f'''<div class="prose">
@@ -801,7 +828,9 @@ code.</p>
 <p><b>It does not prove</b> the trading was skilful, that the same strategy would
 survive a different market, or that no other unpublished account exists. Git
 history can be rewritten by whoever controls the repository &#8212; which is why
-the hash chain is used alongside branch protection rather than instead of it.</p>
+the hash chain is used alongside branch protection and external timestamps
+rather than instead of them. Whether those two are in force is stated above
+rather than assumed here.</p>
 {"" if ts_ok else "<p><b>Still outstanding.</b> Timestamp proofs are not attached yet, so the dates on this record are claimed rather than proven. That gap is stated here rather than left to be discovered.</p>"}
 </div>''', note="And what it does not.")}"""
 
@@ -897,7 +926,7 @@ is echoed in every payload &#8212; currently
 <span class="mono">{esc(metrics["risk_free_source"])}</span>, so the ratios it
 feeds are explicitly gross rather than quietly assuming a rate of zero.</p>
 <p><b>Annualised statistics are withheld below
-{meta["min_sessions_for_annualised"]} sessions.</b> On a handful of sessions they
+{esc(meta["min_sessions_for_annualised"])} sessions.</b> On a handful of sessions they
 are not imprecise estimates, they are meaningless ones. Cumulative return, the
 curve and the best and worst session are published from the first day, because
 those are statements of what happened.</p></div>''',

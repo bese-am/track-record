@@ -1,4 +1,12 @@
 {
+  "artefacts": {
+    "archive_manifest.json": "bd0b5926040e0a07d77bdc50ca6f770b550d3e75542d53032aa659abb08b92da",
+    "books/bese_nominal_100k/analytics.json": "06cfd74808ce02c46425c544519c03bf7b26777ff913d35870a769c41d1eae28",
+    "books/bese_nominal_100k/metrics.json": "8e6a1d0c330f2172e068d65fc822a6414172caee374df40166d9978c16f66091",
+    "books/bese_nominal_100k/nav.csv": "e5b63d6dc434f4e5d07e4211c178e8a0f2e5c8c19a6286eeb60b626c4d0ee3f2",
+    "books/bese_nominal_100k/trades.csv": "f1315867bbc56d573fa036ba90e8a0b687515330e384d413c3e4c3d1f7c0b794",
+    "overrides.json": "fcb39efb4b685058d7c9c6e10ee519c489c551eb964d8303348737b9cec23f99"
+  },
   "book": "bese_nominal_100k",
   "cumulative_return": 0.008299999999999974,
   "daily_return": 0.0030839633903700925,
@@ -12,7 +20,8 @@
     "single_source": "One account is the source; the others follow it",
     "strategy_not_account": "This is a record of a strategy, not of an account"
   },
-  "hash": "56684ae96e8446e1958a78fd144ee4dce47cc9d4d305ce7b488e82f870b9a50b",
+  "hash": "0d7321e9acc9aea400c4dae89e1a19dc911e431f2db9157341335b91c49a06ad",
+  "meta_digest": "b3dca7265738ece95f40959fa4b1a388289639e021c3532b96a29745f58b21d1",
   "metrics": {
     "annualised_basis": 252,
     "computed_by": "bese.metrics.compute_core_metrics",
@@ -71,8 +80,8 @@
     "nominal_capital": 100000.0,
     "source": "constructed from broker completed-trade records by bese.normalize + bese.nav"
   },
-  "prev_hash": "9af8dc92bc3e23c7a3a96a6171fdd18caf4091b77d21617e8fd57a99b6105de2",
-  "published_at": "2026-08-15T20:50:01.880481+00:00",
+  "prev_hash": "a77eee990666d34c8f8bf904b606476f0fb8f6b1026493ed01048075180ee22c",
+  "published_at": "2026-08-16T00:53:23.122393+00:00",
   "schema": "bese.track-record.snapshot/1",
   "session_date": "2026-08-07",
   "sessions": 2,

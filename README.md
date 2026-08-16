@@ -8,7 +8,7 @@ data/inbox/     drop Take Profit Trader or Tradovate exports here
 data/archive/   every export ever ingested, named by content hash — the primary source
 data/repo/      the publishable data repository (index.json, books/, CHAIN.jsonl)
 overrides.json  operator corrections to the broker's grouping — committed, so visible
-site/           the rendered public site, including a copy of the data it renders
+docs/           the rendered public site, including a copy of the data it renders
 bese/           the code
 ```
 
@@ -22,7 +22,7 @@ python3 -m bese.verify              # re-verify the chain from scratch
 python3 tests/test_grouping.py      # run the tests
 ```
 
-Open `site/index.html` in a browser, or deploy the `site/` directory to any
+Open `docs/index.html` in a browser, or deploy the `docs/` directory to any
 static host — Vercel, Netlify, GitHub Pages, S3. There is no build step, no
 dependency and no secret.
 
@@ -50,7 +50,7 @@ dependency and no secret.
   `account_ref: "sha256:…"`. The hash still proves two trades came from the same
   account and still changes when an account is replaced, which is all the record
   claims. Same convention as RVB.
-- **The raw exports.** `data/archive/` is gitignored. It carries the account
+- **The raw exports.** `data/inbox/`, `data/archive/`, `data/tpt/` and `data/raw/` are gitignored. It carries the account
   identifier in the clear and nothing on the site needs it; the operator holds it
   and can share it with anyone who asks.
 

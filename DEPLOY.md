@@ -83,7 +83,7 @@ Settings → Rules → Rulesets → New branch ruleset, targeting `main`:
 - Block force pushes ✓
 
 Without these, whoever controls the repository can rewrite history and the chain
-proves less than it appears to. The Verify page says so; make it untrue.
+proves less than it appears to. The Verify page now states whether it is in force rather than assuming it; turn it on so the answer is yes.
 
 **5. Custom domain** (optional). Put the hostname in a `CNAME` file at the
 project root — the publisher copies it into `docs/` on every run, so a rebuild

@@ -14,7 +14,6 @@
       "sha256": "d80ca7ebfcb24effc5560d747c27229e565400c45da9350905270f9274544789"
     }
   ],
-  "generated_at": "2026-08-15T23:46:19.593806+00:00",
   "note": "SHA-256 of every raw export the published record was built from. The exports are NOT published \u2014 they carry the firm's account identifier \u2014 but they are committed to here, so any one of them can later be produced and shown to be the file held on this date.",
   "schema": "bese.archive-manifest/1"
 }

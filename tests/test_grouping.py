@@ -17,7 +17,7 @@ from bese.chain import GENESIS, canonical, record_hash          # noqa: E402
 from bese.contracts import cost_per_nq_equivalent, nq_equivalent  # noqa: E402
 from bese.group import group_legs                                # noqa: E402
 from bese.metrics import MetricInputs, compute_core_metrics      # noqa: E402
-from bese.model import account_ref                               # noqa: E402
+from bese.model import account_ref, reset_account_labels                               # noqa: E402
 from bese.nav import build_nav                                   # noqa: E402
 from bese.normalize import normalise_all                         # noqa: E402
 from bese.sources import read_tpt, read_tradovate                # noqa: E402
@@ -52,11 +52,16 @@ def test_account_identifier_is_never_published():
     # real one -- so the test asserting the account number is never published
     # was itself committing it to a public repository. The fixture has to be
     # invented or the test defeats its own purpose.
+    reset_account_labels()
     fake = "ACCOUNT000000000"
     ref = account_ref(fake)
     assert ref is not None
     assert fake not in ref
-    assert ref.startswith("sha256:")
+    # And NOT a hash of it either: the identifier space is ~10^9 with a known
+    # prefix, so a published SHA-256 of one solves in seconds on a GPU.
+    assert not ref.startswith("sha256:")
+    assert ref == "account 1"
+    assert account_ref("ACCOUNT111111111") == "account 2"
     assert account_ref(None) is None
     # Stable: the same account must always produce the same reference, or the
     # record would appear to change accounts when it did not.

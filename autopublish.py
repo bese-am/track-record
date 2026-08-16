@@ -41,7 +41,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from bese import site as site_builder
-from bese.chain import GENESIS, rebuild_chain, verify, write_snapshot
+from bese.chain import (GENESIS, artefact_digests, rebuild_chain,
+                        verify, write_snapshot)
 from bese.contracts import CONTRACTS, COST_PER_NQ_EQUIVALENT
 from bese.disclosures import DISCLOSURES
 from bese.group import group_legs
@@ -145,7 +146,8 @@ def main() -> None:
         for n in stats["notes"][:5]:
             log(f"  MISMATCH {n}")
         die("stated P&L disagrees with the contract multiplier — check contracts.py")
-    log(f"  {len(legs)}/{len(legs)} reconcile against the published point values")
+    log(f"  {len(legs)}/{len(legs)} reconcile against the published point values "
+        f"({', '.join(f'{k}:{v}' for k, v in sorted(stats['by_source'].items()))})")
 
     # 4 -------------------------------------------------------------------
     log("4. grouping and normalising")
@@ -248,7 +250,7 @@ def main() -> None:
         w.writerow(["trade_id", "session", "symbol", "direction", "qty", "nq_equiv",
                     "entry_price", "exit_price", "opened_at", "closed_at",
                     "gross_pnl", "costs", "cost_basis", "net_pnl",
-                    "standardised_pnl", "legs", "source", "account",
+                    "standardised_pnl", "legs", "source", "account_label",
                     "override", "flags"])
         for t in norm:
             w.writerow([t.trade_id, t.session, t.symbol, t.direction, f"{t.qty:g}",
@@ -258,19 +260,25 @@ def main() -> None:
                         f"{t.standardised_pnl:.2f}", t.legs, t.source,
                         t.account_ref or "", t.override or "", t.flags])
 
-    metrics_payload = {"book": BOOK, "as_of": str(nav[-1].date),
-                       "published_at": now, **core}
+    # No `published_at` here, and that is deliberate. These files are pinned
+    # by the hash chain, so a wall-clock stamp inside them would change their
+    # digest on every run and break the pin for no reason. Removing it also
+    # makes the whole publication deterministic -- same inputs, byte-identical
+    # outputs -- which is what lets anyone re-run the publisher and compare,
+    # and it stops the scheduler producing a commit a day with no data in it.
+    metrics_payload = {"book": BOOK, "as_of": str(nav[-1].date), **core}
     (BOOK_DIR / "metrics.json").write_text(
-        json.dumps(metrics_payload, indent=2, sort_keys=True, default=str) + "\n",
+        json.dumps(metrics_payload, indent=2, sort_keys=True,
+                   allow_nan=False, default=str) + "\n",
         encoding="utf-8", newline="\n")
 
-    analytics_payload = {"book": BOOK, "as_of": str(nav[-1].date),
-                         "published_at": now, **analytics}
+    analytics_payload = {"book": BOOK, "as_of": str(nav[-1].date), **analytics}
     (BOOK_DIR / "analytics.json").write_text(
-        json.dumps(analytics_payload, indent=2, sort_keys=True, default=str) + "\n",
+        json.dumps(analytics_payload, indent=2, sort_keys=True,
+                   allow_nan=False, default=str) + "\n",
         encoding="utf-8", newline="\n")
 
-    # Hashed, never the firm's own identifier -- see model.account_ref.
+    # An ordinal label, never the firm's identifier or a hash of it.
     accounts = sorted({t.account_ref for t in norm if t.account_ref})
     instruments = {}
     for t in norm:
@@ -301,7 +309,7 @@ def main() -> None:
         "sessions": len(nav) - 1,
         "trades": len(norm),
         "instruments": instruments,
-        "account_refs": accounts,
+        "account_labels": accounts,
         "account_numbers": None,
         "account_continuity": ("The series is built from trades, not from account "
                                "equity, so replacing an account does not reset it."),
@@ -316,6 +324,23 @@ def main() -> None:
 
     # 9 -------------------------------------------------------------------
     log("9. chaining the session record")
+
+    # `overrides.json` says of itself that it is hash-chained, and it was not.
+    # Copy it into the record so the claim becomes true and a reader can see
+    # every correction that shaped the numbers above it.
+    shutil.copy2(ROOT / "overrides.json", REPO / "overrides.json")
+
+    # Commit to the raw exports without publishing them: their hashes go into
+    # the record, the files stay on this machine.
+    manifest = ots.archive_manifest(ARCHIVE, REPO / "archive_manifest.json")
+    log(f"  archive manifest: {manifest['count']} raw export(s) committed by hash")
+
+    # Every published file is now digested INTO the session record. Without
+    # this the chain covered snapshots and nothing else, so nav.csv -- the file
+    # the Verify page tells a stranger to recompute from -- could be edited
+    # freely and verification still said "chain ok".
+    arte = artefact_digests(REPO, BOOK)
+
     prev = GENESIS
     chain_file = REPO / "CHAIN.jsonl"
     if chain_file.exists():
@@ -348,21 +373,34 @@ def main() -> None:
             "trades": p.trades,
             "metrics": snap_core,
             "disclosure": {d["id"]: d["title_en"] for d in DISCLOSURES},
-        }, prev)
+        }, prev, artefacts=arte, meta=meta)
         written += 1
 
-    # Commit to the raw exports without publishing them: their hashes go into
-    # the record, the files stay on this machine.
-    manifest = ots.archive_manifest(ARCHIVE, REPO / "archive_manifest.json")
-    log(f"  archive manifest: {manifest['count']} raw export(s) committed by hash")
+    # A run that changes a published file without adding a session means data
+    # for an ALREADY-CHAINED session moved -- a late fill, or an edit. The old
+    # code let that through silently: nav.csv was rebuilt from the whole
+    # archive while the snapshot stayed frozen at the original figure, so the
+    # chain went on attesting a number the published record no longer showed.
+    # It has to be loud, because in the other direction it is a mechanism for
+    # freezing a flattering number into the record and citing the chain.
+    if written == 0:
+        head_file = sorted((BOOK_DIR / "snapshots").glob("*.json"))
+        if head_file:
+            head_rec = json.loads(head_file[-1].read_text(encoding="utf-8"))
+            stale = {k: v for k, v in arte.items()
+                     if (head_rec.get("artefacts") or {}).get(k) != v}
+            if stale and head_rec.get("artefacts") is not None:
+                for k in sorted(stale):
+                    log(f"  CHANGED {k}")
+                die("published files changed but no new session was added — data "
+                    "for an already-chained session moved. Resolve it with an "
+                    "override rather than letting the chain and the record drift.")
 
     entries = rebuild_chain(REPO, BOOK, BOOK_DIR)
-    ok, notes = verify(REPO)
-    if not ok:
-        for n in notes:
-            log(f"  {n}")
-        die("the published chain does not verify")
-    log(f"  {written} new snapshot(s), {len(entries)} chained records — {notes[0]}")
+    # Verification happens AFTER meta.json and index.json are written, further
+    # down. It cannot happen here any more: the snapshots now pin a digest of
+    # meta.json, so checking before that file is written compares the new
+    # record against the previous run's metadata and always fails.
 
     # A timestamp proves a record existed when it claims to. The chain alone
     # cannot: it shows the series is internally complete, not that it was not
@@ -384,19 +422,32 @@ def main() -> None:
         "pending": len(ts["pending"]),
         "available": ts["client"] is not None,
         "note": ts.get("note"),
-        "proves": ("each record existed at or before the anchoring block; "
-                   "combined with the chain, the series can be neither "
-                   "back-dated nor silently shortened"),
+        # Stated conditionally, because it was previously asserted flat next
+        # to "available": false -- claiming a property of an artefact that did
+        # not have it.
+        "proves": (("each record existed at or before the anchoring block; "
+                    "combined with the chain, the series can be neither "
+                    "back-dated nor silently shortened")
+                   if ts["client"] is not None else
+                   ("nothing yet: no proofs are attached. The chain shows the "
+                    "series is internally consistent and complete relative to "
+                    "itself; it does not show when it was built.")),
     }
     meta["chain_head"] = entries[-1]["hash"] if entries else None
+    # When the record was published, not when this script last ran. Using the
+    # wall clock meant every scheduled run rewrote ~15 files with no data
+    # behind the change, producing a commit a day that said nothing. The
+    # chain's own `ts` for the newest session is both stabler and truer.
+    meta["published_at"] = entries[-1]["ts"] if entries else now
     (BOOK_DIR / "meta.json").write_text(
-        json.dumps(meta, indent=2, sort_keys=True, default=str) + "\n",
+        json.dumps(meta, indent=2, sort_keys=True,
+                   allow_nan=False, default=str) + "\n",
         encoding="utf-8", newline="\n")
 
     (REPO / "index.json").write_text(json.dumps({
         "schema": "bese.track-record.index/1",
         "publisher": "Besë Asset Management",
-        "published_at": now,
+        "published_at": entries[-1]["ts"] if entries else now,
         "min_sessions_for_annualised": MIN_SESSIONS_FOR_ANNUALISED,
         "disclosures": DISCLOSURES,
         "chain": {"file": "CHAIN.jsonl", "entries": len(entries)},
@@ -414,8 +465,17 @@ def main() -> None:
                       "trades": f"books/{BOOK}/trades.csv",
                       "snapshots": f"books/{BOOK}/snapshots/"},
         }],
-    }, indent=2, sort_keys=True, default=str) + "\n",
+    }, indent=2, sort_keys=True, allow_nan=False, default=str) + "\n",
         encoding="utf-8", newline="\n")
+
+    # Now that every published file is on disk, re-verify the whole record the
+    # way a stranger would. This is the last gate before anything is committed.
+    ok, notes = verify(REPO)
+    if not ok:
+        for n in notes:
+            log(f"  {n}")
+        die("the published chain does not verify")
+    log(f"  {written} new snapshot(s), {len(entries)} chained records — {notes[0]}")
 
     log(f"  NAV {nav[-1].equity:,.2f}  ({cum * 100:+.4f}%)  "
         f"{len(nav) - 1} sessions  {len(norm)} trades")

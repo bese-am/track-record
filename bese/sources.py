@@ -34,6 +34,37 @@ def _tpt_link_keys(account: str, root: str, direction: str,
     return (f"{stem}|in|{opened.isoformat()}", f"{stem}|out|{closed.isoformat()}")
 
 
+#: The furthest ahead a session may plausibly be dated. A timestamp beyond this
+#: is a corrupt row, not a trade, and letting one through dates a session in the
+#: year 9999 and permanently poisons the chain's ordering.
+MAX_FUTURE_DAYS = 7
+
+
+def num(raw, field: str, *, allow_negative: bool = True) -> float:
+    """float(), but it rejects the values that defeat every downstream guard.
+
+    Python's `float()` happily returns NaN and Infinity, and every validation
+    in this codebase is a `> threshold` comparison. Comparisons against NaN are
+    all False, so a single NaN price walked past the P&L reconciliation, past
+    the compounding-identity check, and into a hash-chained snapshot -- one
+    that Python could read back and a conformant JSON parser could not.
+    """
+    v = float(raw)
+    if v != v or v in (float("inf"), float("-inf")):
+        raise ValueError(f"{field}: {raw!r} is not a finite number")
+    if not allow_negative and v < 0:
+        raise ValueError(f"{field}: {raw!r} is negative")
+    return v
+
+
+def check_time(ts, field: str):
+    from datetime import datetime, timedelta, timezone
+    limit = datetime.now(timezone.utc) + timedelta(days=MAX_FUTURE_DAYS)
+    if ts > limit:
+        raise ValueError(f"{field}: {ts.isoformat()} is in the future")
+    return ts
+
+
 def read_tpt(path: Path) -> list[Leg]:
     out: list[Leg] = []
     with open(path, newline="", encoding="utf-8-sig") as fh:
@@ -42,10 +73,14 @@ def read_tpt(path: Path) -> list[Leg]:
                 continue
             root = parse_root(r["symbol"])
             direction = "long" if r["position"].strip().upper() == "L" else "short"
-            qty = float(r["maxQuantity"])
-            entry, exit_ = float(r["entryPrice"]), float(r["exitPrice"])
-            commission = float(r["commission"])
-            net = float(r["pnlDollars"])
+            qty = num(r["maxQuantity"], "maxQuantity", allow_negative=False)
+            entry = num(r["entryPrice"], "entryPrice")
+            exit_ = num(r["exitPrice"], "exitPrice")
+            # A negative commission is a rebate, or a corrupt cell. Either way
+            # it inflates net P&L and gets published as cost_basis "reported"
+            # -- flagged in the record as the authoritative charged figure.
+            commission = num(r["commission"], "commission", allow_negative=False)
+            net = num(r["pnlDollars"], "pnlDollars")
 
             sign = 1 if direction == "long" else -1
             gross = round((exit_ - entry) * CONTRACTS[root].point_value * qty * sign, 6)
@@ -55,8 +90,8 @@ def read_tpt(path: Path) -> list[Leg]:
             if abs(gross - commission - net) > 0.005:
                 notes += (f"pnl_disagrees:gross={gross} comm={commission} net={net}",)
 
-            opened = _iso(r["entryDate"])
-            closed = _iso(r["exitDate"])
+            opened = check_time(_iso(r["entryDate"]), "entryDate")
+            closed = check_time(_iso(r["exitDate"]), "exitDate")
             out.append(Leg(
                 source="tpt",
                 leg_id=r["tradeId"].strip(),
@@ -125,11 +160,28 @@ def read_tradovate(path: Path, source_tz: tzinfo = TRADOVATE_TZ) -> list[Leg]:
         for r in csv.DictReader(fh):
             if not (r.get("symbol") or "").strip():
                 continue
-            bought = datetime.strptime(
-                r["boughtTimestamp"].strip(), TRADOVATE_TS).replace(tzinfo=source_tz)
-            sold = datetime.strptime(
-                r["soldTimestamp"].strip(), TRADOVATE_TS).replace(tzinfo=source_tz)
+            bought = check_time(datetime.strptime(
+                r["boughtTimestamp"].strip(), TRADOVATE_TS)
+                .replace(tzinfo=source_tz), "boughtTimestamp")
+            sold = check_time(datetime.strptime(
+                r["soldTimestamp"].strip(), TRADOVATE_TS)
+                .replace(tzinfo=source_tz), "soldTimestamp")
             short = sold < bought
+            stated = parse_money(r["pnl"])
+            _qty = num(r["qty"], "qty", allow_negative=False)
+            _entry = num(r["sellPrice"] if short else r["buyPrice"], "price")
+            _exit = num(r["buyPrice"] if short else r["sellPrice"], "price")
+            _sign = -1 if short else 1
+            _root = parse_root(r["symbol"])
+            _gross = round((_exit - _entry) * CONTRACTS[_root].point_value
+                           * _qty * _sign, 6)
+            # This reader used to take the broker's stated P&L on trust while
+            # the publisher reported that every leg had been reconciled. A row
+            # declaring $500,000 on a 1-lot passed straight through.
+            tv_notes: tuple[str, ...] = ()
+            if abs(_gross - stated) > 0.005:
+                tv_notes += (f"pnl_disagrees:computed={_gross} stated={stated}",)
+
             out.append(Leg(
                 source="tradovate",
                 leg_id=f"{r['buyFillId'].strip()}/{r['sellFillId'].strip()}",
@@ -137,18 +189,19 @@ def read_tradovate(path: Path, source_tz: tzinfo = TRADOVATE_TZ) -> list[Leg]:
                 symbol=r["symbol"].strip(),
                 root=parse_root(r["symbol"]),
                 direction="short" if short else "long",
-                qty=float(r["qty"]),
-                entry_price=float(r["sellPrice"] if short else r["buyPrice"]),
-                exit_price=float(r["buyPrice"] if short else r["sellPrice"]),
+                qty=num(r["qty"], "qty", allow_negative=False),
+                entry_price=num(r["sellPrice"] if short else r["buyPrice"], "price"),
+                exit_price=num(r["buyPrice"] if short else r["sellPrice"], "price"),
                 opened_at=sold if short else bought,
                 closed_at=bought if short else sold,
-                gross_pnl=parse_money(r["pnl"]),
+                gross_pnl=stated,
                 commission=None,          # not reported -> rate card stands in
                 session_hint=None,
                 # Exact broker linkage: Tradovate splits one position into
                 # several rows that share a fill id on the un-split side.
                 link_keys=(f"fill|{r['buyFillId'].strip()}",
                            f"fill|{r['sellFillId'].strip()}"),
+                notes=tv_notes,
             ))
     return out
 

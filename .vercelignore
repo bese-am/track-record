@@ -1,4 +1,4 @@
-﻿# Vercel only needs the rendered site and the config that points at it.
+# Vercel only needs the rendered site and the config that points at it.
 #
 # Every pattern here is ANCHORED with a leading slash. Without one, gitignore
 # semantics match at any depth -- so a bare `data/` also excluded `docs/data/`,

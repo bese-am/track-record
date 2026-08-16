@@ -16,27 +16,41 @@ which file a number came from.
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass, field
 from datetime import date, datetime
+
+
+_ACCOUNT_LABELS: dict = {}
+
+
+def reset_account_labels() -> None:
+    """Labels are assigned per publishing run; tests need a clean slate."""
+    _ACCOUNT_LABELS.clear()
 
 
 def account_ref(account: str | None) -> str | None:
     """A stable, non-identifying reference to an account.
 
-    The firm's account identifier is not published. It identifies a real
-    account at a real firm, it appears in nothing a reader needs, and a track
-    record is a document strangers are invited to scrutinise -- so the
-    identifier itself is a liability with no compensating benefit. The hash
-    still proves two trades came from the same account, and still changes when
-    an account is replaced, which is all the record actually claims.
+    A HASH of the identifier is not good enough, which is the mistake this
+    replaces. The firm issues identifiers of a known shape -- a fixed
+    alphabetic prefix and nine digits -- so the whole space is about 10^9
+    candidates, and the record names the firm in its own `source` column.
+    SHA-256 is fast by design: that space sweeps in minutes on a laptop and
+    under a second on a GPU. Publishing the hash of a low-entropy identifier
+    publishes the identifier.
 
-    Same convention as the system this is modelled on, which publishes
-    `account_ref: "sha256:..."` and `account_number: null`.
+    So the published reference carries no preimage at all. Accounts are
+    labelled in the order they first appear, which preserves everything the
+    record actually claims -- that two trades came from the same account, and
+    that the series survived an account being replaced -- and reveals nothing
+    else. Trades are sorted by (closed_at, trade_id) before normalisation, so
+    the labelling is deterministic across runs.
     """
     if not account:
         return None
-    return "sha256:" + hashlib.sha256(account.encode("utf-8")).hexdigest()[:16]
+    if account not in _ACCOUNT_LABELS:
+        _ACCOUNT_LABELS[account] = f"account {len(_ACCOUNT_LABELS) + 1}"
+    return _ACCOUNT_LABELS[account]
 
 
 @dataclass(frozen=True)
