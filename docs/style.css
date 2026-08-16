@@ -99,6 +99,13 @@ font-size:12.5px;line-height:1.6;margin:18px 0 0}
 .prose p{color:var(--fg-muted);font-size:13px;max-width:72ch;margin:0 0 11px}
 .prose p:last-child{margin-bottom:0}
 .prose b,.prose strong{color:var(--fg)}
+/* The only outbound links on the site. Given a hairline underline like every
+   other link, plus a little more air, so they read as actions rather than as
+   running text. */
+.prose a[href^="http"]{color:var(--accent);
+  border-bottom-color:color-mix(in srgb,var(--accent) 35%,transparent)}
+.prose p.links{display:flex;flex-wrap:wrap;gap:18px;margin-top:16px}
+.prose p.links a{font-size:12.5px;letter-spacing:.01em}
 pre{background:var(--bg-subtle);padding:13px 15px;overflow-x:auto;
 font-size:11px;line-height:1.55;
 font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin:0 0 11px}

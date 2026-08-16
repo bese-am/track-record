@@ -23,6 +23,15 @@ gated one says why.
 
 from __future__ import annotations
 
+#: Where the record lives, and who answers for it. Named on the page because a
+#: verification document that cannot be argued with is not doing its job: the
+#: reader needs a route to say "this number is wrong" that does not depend on
+#: the operator choosing to listen.
+REPO_SLUG = "bese-am/track-record"
+REPO_URL = "https://github.com/bese-am/track-record"
+OWNER = "kkacajj"
+OWNER_URL = "https://github.com/kkacajj"
+
 import csv
 import html
 import json
@@ -349,6 +358,13 @@ font-size:12.5px;line-height:1.6;margin:18px 0 0}
 .prose p{color:var(--fg-muted);font-size:13px;max-width:72ch;margin:0 0 11px}
 .prose p:last-child{margin-bottom:0}
 .prose b,.prose strong{color:var(--fg)}
+/* The only outbound links on the site. Given a hairline underline like every
+   other link, plus a little more air, so they read as actions rather than as
+   running text. */
+.prose a[href^="http"]{color:var(--accent);
+  border-bottom-color:color-mix(in srgb,var(--accent) 35%,transparent)}
+.prose p.links{display:flex;flex-wrap:wrap;gap:18px;margin-top:16px}
+.prose p.links a{font-size:12.5px;letter-spacing:.01em}
 pre{background:var(--bg-subtle);padding:13px 15px;overflow-x:auto;
 font-size:11px;line-height:1.55;
 font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin:0 0 11px}
@@ -712,9 +728,7 @@ def verify_page(idx, meta, chain):
             "<span class=\"mono\">ots info</span> reads the proof offline, and "
             "the verifier at opentimestamps.org will check it in your browser "
             "&#8212; at the cost of trusting that site and its block "
-            "explorers.</p>"
-            f"<p>{esc(ts.get('confirmed', 0))} of {esc(ts.get('snapshots', 0))} snapshots "
-            f"confirmed, {esc(ts.get('pending', 0))} awaiting confirmation.</p></div>")
+            "explorers.</p></div>")
 
     rows = "".join(
         f'<tr><td>{esc(e["session_date"])}</td>'
@@ -836,7 +850,25 @@ the hash chain is used alongside branch protection and external timestamps
 rather than instead of them. Whether those two are in force is stated above
 rather than assumed here.</p>
 {"" if ts_ok else "<p><b>Still outstanding.</b> Timestamp proofs are not attached yet, so the dates on this record are claimed rather than proven. That gap is stated here rather than left to be discovered.</p>"}
-</div>''', note="And what it does not.")}"""
+</div>''', note="And what it does not.")}
+
+{sec("Where the data is", f'''<div class="prose">
+<p>Everything above &#8212; the record, the site that renders it, and the code
+that computes every number &#8212; is in
+<a href="{REPO_URL}">{esc(REPO_SLUG)}</a>. It is public. The
+<span class="mono">main</span> branch is protected against force-push and
+deletion, so the append-only history cannot be rewritten without leaving a
+trace.</p>
+<p>Publication runs on the trading machine itself. GitHub Actions is not
+involved in producing this data and holds no broker credential.</p>
+<p><b>Found something wrong?</b> If a check fails, a number does not reconcile,
+or something here is unclear, please say so. Open an issue and tag
+<a href="{OWNER_URL}">@{esc(OWNER)}</a>. A track record nobody can question is
+not one worth publishing.</p>
+<p class="links">
+<a href="{OWNER_URL}">@{esc(OWNER)} maintains this record</a>
+<a href="{REPO_URL}/issues/new">Open an issue</a>
+</p></div>''', note="Public, and open to challenge.")}"""
 
 
 def methodology_page(meta, metrics):
