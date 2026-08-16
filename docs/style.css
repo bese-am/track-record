@@ -1,10 +1,10 @@
 :root{color-scheme:light dark;
 --bg:#ffffff;--bg-subtle:#fafafa;--fg:#111318;--fg-muted:#5b6270;--fg-faint:#8b93a1;
---hairline:#ececf0;--up:#10814a;--down:#c0392f;--accent:#1b3a6b;--bench:#9aa3b2;
+--hairline:#ececf0;--up:#0d8b7d;--down:#b91c1c;--accent:#1b3a6b;--bench:#9aa3b2;
 --warn-bg:#f6f6f7;--warn-fg:#3f4450}
 @media(prefers-color-scheme:dark){:root{
 --bg:#0d0f12;--bg-subtle:#121519;--fg:#eef1f5;--fg-muted:#a2abba;--fg-faint:#6f7889;
---hairline:#23272e;--up:#3ddc97;--down:#ff7a6e;--accent:#9dc0f5;--bench:#616b7c;
+--hairline:#23272e;--up:#14b8a6;--down:#ff7a6e;--accent:#9dc0f5;--bench:#616b7c;
 --warn-bg:#16181c;--warn-fg:#c7cdd8}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);
@@ -58,6 +58,17 @@ line-height:1;font-variant-numeric:tabular-nums}
 .zero{stroke:var(--hairline);stroke-width:1}
 .line{fill:none;stroke:var(--accent);stroke-width:1.6;stroke-linejoin:round;
 stroke-linecap:round}
+/* The chain ribbon. One segment per session, a 2px surface gap between them so
+   the links read as separate without a border on each. Anchored segments carry
+   the accent; unanchored ones sit back at hairline weight -- the difference
+   between proven and merely claimed, shown rather than captioned. */
+.strip{display:flex;gap:2px;margin:0 0 9px;height:26px}
+.strip .seg{flex:1 1 0;min-width:2px;background:var(--hairline);border-radius:1px}
+.strip .seg.anchored{background:var(--accent)}
+.strip.compact{height:8px;margin:14px 0 0}
+.strip-ends{display:flex;justify-content:space-between;gap:12px;margin:0 0 20px;
+font-size:11px;color:var(--fg-faint);font-variant-numeric:tabular-nums}
+.strip-ends span:nth-child(2){color:var(--fg-muted)}
 .mark{fill:var(--accent)}
 .focus{fill:var(--accent)}
 .cross{stroke:var(--hairline);stroke-width:1}
@@ -130,6 +141,11 @@ font-size:12.5px;line-height:1.6;margin:18px 0 0}
      The value it carries is already in the tables below. */
   .hit{display:none}
   .tip{display:none}
+  .strip{height:22px}
+  /* Three columns of date/count/date will not fit; stack the count under the
+     dates rather than shrinking type below legibility. */
+  .strip-ends{flex-wrap:wrap;row-gap:3px}
+  .strip-ends span:nth-child(2){order:3;flex-basis:100%;text-align:center}
   .kpi .v{font-size:23px}
   h1{font-size:29px}
   pre{font-size:11px;padding:11px 12px}

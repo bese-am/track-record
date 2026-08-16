@@ -57,6 +57,12 @@
       "title_en": "This is a record of a strategy, not of an account"
     },
     {
+      "body_en": "Trading is done inside a proprietary-firm programme whose rules attach consequences to crossing certain profit thresholds: an account transition, a payout process, a period during which the account cannot be traded. Approaching one changes how the strategy is traded. Positions are closed earlier than the signal alone would suggest, size is reduced, and trading may stop entirely for administrative reasons unrelated to the market. Losses carry no equivalent brake.\n\nSo the distribution published here is bounded on the right by a rule and open on the left. The largest gain in the trade ledger is limited in a way the largest loss is not, an asymmetry visible in trades.csv and one that no statistic on this site corrects for. Read the upper tail as a limit of the programme rather than of the strategy.\n\nSessions may also be absent because the account was unavailable rather than because no opportunity arose. The record cannot distinguish the two and does not try to.",
+      "id": "constrained_upside",
+      "severity": "important",
+      "title_en": "Gains are constrained by programme rules; losses are not"
+    },
+    {
       "body_en": "Sharpe, Sortino, Calmar, CAGR, volatility, maximum drawdown, VaR, skew, kurtosis and win rate are suppressed until the book has at least 60 sessions. On a handful of sessions these are not imprecise estimates, they are meaningless ones. Cumulative return, the equity curve, and the best and worst session are published from the first day, because those are statements of what happened rather than estimates of anything.",
       "id": "short_history",
       "severity": "important",

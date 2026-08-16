@@ -51,6 +51,14 @@
   "source_exports": 2,
   "tagline_en": "NQ / MNQ index futures, normalised to 1 NQ-equivalent exposure",
   "timestamping": {
+    "anchors": {
+      "2026-08-04": 962654,
+      "2026-08-07": 962654,
+      "2026-08-10": 962654,
+      "2026-08-11": 962654,
+      "2026-08-13": 962654,
+      "2026-08-14": 962654
+    },
     "available": true,
     "confirmed": 6,
     "method": "OpenTimestamps (Bitcoin)",
