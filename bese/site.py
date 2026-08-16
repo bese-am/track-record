@@ -568,6 +568,24 @@ document.querySelectorAll('.strip .seg').forEach(el=>{
 });
 """
 
+def url(page: str) -> str:
+    """The address a page is linked by, given the file it is served from.
+
+    The files on disk keep their extensions, so `docs/` stays a plain static
+    tree that anyone can mirror or serve themselves -- that property is load
+    bearing, because the Verify page invites a stranger to take a copy. Only
+    the links change: `cleanUrls` in vercel.json serves verify.html at /verify
+    and redirects the .html form to it, so linking to the clean form directly
+    means no redirect on every internal click.
+
+    One consequence, stated rather than discovered: opening docs/index.html
+    straight off the filesystem no longer navigates, because these are absolute
+    paths. Serving the directory works; double-clicking the file does not.
+    Nothing in the verification path goes through the rendered pages.
+    """
+    return "/" if page == "index.html" else "/" + page[:-len(".html")]
+
+
 PAGES = [("index.html", "Track record"), ("portfolio.html", "Portfolio"),
          ("verify.html", "Verify"), ("methodology.html", "Methodology"),
          ("disclosures.html", "Disclosures")]
@@ -598,14 +616,14 @@ def scrollable_tables(body: str) -> str:
 
 
 def shell(title: str, active: str, body: str, published: str) -> str:
-    nav = "".join(f'<a href="{h}"{" class=on" if h == active else ""}>{t}</a>'
+    nav = "".join(f'<a href="{url(h)}"{" class=on" if h == active else ""}>{t}</a>'
                   for h, t in PAGES)
     return f"""<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{title} · Besë Asset Management</title>
 <link rel="stylesheet" href="style.css"></head><body>
 <header class="top"><div class="in">
-<a class="brand" href="index.html">Besë <span>Asset Management</span></a>
+<a class="brand" href="/">Besë <span>Asset Management</span></a>
 <nav>{nav}</nav></div></header>
 <div class="wrap">{scrollable_tables(body)}
 <div class="foot">
@@ -614,7 +632,7 @@ normalisation base. It is not client money, and no prop firm's advertised
 account size is treated as capital under management.</p>
 <p>Past performance is not indicative of future results. Nothing here is
 investment advice, an offer, or a solicitation. Futures trading carries
-substantial risk of loss. See <a href="disclosures.html">disclosures</a>.</p>
+substantial risk of loss. See <a href="/disclosures">disclosures</a>.</p>
 <p>Published {published} · every figure computed by
 <span class="mono">bese.metrics</span>, not by the browser.</p>
 </div></div><div class="tip" id="tip"></div><script src="app.js"></script></body></html>"""
@@ -660,7 +678,7 @@ def landing(idx, meta, metrics, nav, chain=None):
              + '<p class="notice">Cumulative return since inception. Exposure is '
                'held at 1 NQ-equivalent regardless of NAV, so the strategy is '
                'constant-notional while the return series compounds exactly. '
-               '<a href="portfolio.html">Full statistics and trade ledger &#8594;</a>'
+               '<a href="/portfolio">Full statistics and trade ledger &#8594;</a>'
                '</p>')
 
     about = '''<div class="prose">
@@ -674,7 +692,7 @@ not present it as one.</p>
 <p><b>The NAV is constructed, not quoted.</b> It is computed from fills by
 published code rather than read from an account balance. That is a weaker claim
 than quoting a broker's equity endpoint, and it is why the
-<a href="verify.html">verification</a> is built the way it is.</p></div>'''
+<a href="/verify">verification</a> is built the way it is.</p></div>'''
 
     return f"""
 <p class="eyebrow">Live track record</p>
