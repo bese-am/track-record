@@ -40,6 +40,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from bese import site as site_builder
+from bese.chain import ARTEFACTS as ARTEFACTS_TEMPLATES
 from bese.chain import (GENESIS, artefact_digests, rebuild_chain,
                         verify, write_snapshot)
 from bese.contracts import CONTRACTS, COST_PER_NQ_EQUIVALENT
@@ -107,12 +108,112 @@ def sweep_inbox(dry: bool) -> int:
     return moved
 
 
+def timestamps_only(args) -> None:
+    """Mature the proofs without touching the record.
+
+    A fresh OpenTimestamps proof is a commitment to a calendar server; the
+    aggregating Bitcoin transaction confirms hours later, and only then can the
+    proof be upgraded to something a verifier can check against the chain. That
+    is a clock, not a trading event -- it has nothing to do with whether a new
+    session exists.
+
+    A full publish run cannot do this job. It rebuilds every published file
+    from the archive, and if anything has changed since the head snapshot was
+    chained -- an operator decision recorded in overrides.json, say -- it
+    aborts, correctly, BEFORE reaching the stamping step. So the proofs would
+    stay pending until the next trading day, for reasons that have nothing to
+    do with timestamps.
+
+    This path touches only what the chain does not pin: the `.ots` files, which
+    sit beside the snapshots and are not artefacts, and `meta.json`'s
+    `timestamping` block, which `chain.META_DERIVED` excludes from the meta
+    digest precisely so that proof counters can move without disturbing the
+    record. Every published figure is left exactly as chained.
+    """
+    log("=" * 62)
+    log("Besë publisher run  (timestamps only)")
+
+    meta_path = BOOK_DIR / "meta.json"
+    if not meta_path.exists():
+        die("no published record yet — run a full publish first")
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+
+    log("1. maturing the OpenTimestamps proofs")
+    ts = ots.stamp_new_snapshots(BOOK_DIR)
+    if ts["client"] is None:
+        die(f"no OpenTimestamps client: {ts['note']}")
+    log(f"  {len(ts['stamped'])} new, {len(ts['upgraded'])} confirmed, "
+        f"{len(ts['pending'])} still pending")
+    for f in ts["failed"]:
+        log(f"  stamp failed: {f}")
+
+    before = json.dumps(meta.get("timestamping"), sort_keys=True)
+    meta["timestamping"] = {
+        "method": "OpenTimestamps (Bitcoin)" if ts["client"] else None,
+        "snapshots": ts["total_snapshots"],
+        "confirmed": len(ts["upgraded"]),
+        "pending": len(ts["pending"]),
+        "available": ts["client"] is not None,
+        "note": ts.get("note"),
+        "proves": (("each record existed at or before the anchoring block; "
+                    "combined with the chain, the series can be neither "
+                    "back-dated nor silently shortened")
+                   if ts["client"] is not None else
+                   ("nothing yet: no proofs are attached. The chain shows the "
+                    "series is internally consistent and complete relative to "
+                    "itself; it does not show when it was built.")),
+    }
+    if json.dumps(meta["timestamping"], sort_keys=True) == before and not ts["stamped"]:
+        log("  nothing matured since the last run")
+
+    meta_path.write_text(
+        json.dumps(meta, indent=2, sort_keys=True, allow_nan=False,
+                   default=str) + "\n", encoding="utf-8", newline="\n")
+
+    log("2. re-rendering and re-verifying")
+    if not args.no_site:
+        pages = site_builder.build(REPO, SITE)
+        log(f"  {len(pages)} pages -> {SITE}")
+
+    # The proof of the claim above: the record still verifies against the
+    # digests the snapshots pinned, untouched.
+    ok, notes = verify(REPO)
+    if not ok:
+        for n in notes:
+            log(f"  {n}")
+        die("the published chain does not verify")
+    log(f"  {notes[0]}")
+
+    if args.push:
+        log("3. publishing to git")
+        try:
+            subprocess.run(["git", "add", "-A", "data/repo", "docs"],
+                           cwd=ROOT, check=True)
+            if subprocess.run(["git", "diff", "--cached", "--quiet"],
+                              cwd=ROOT).returncode == 0:
+                log("  no change to publish")
+            else:
+                msg = (f"timestamps: {len(ts['upgraded'])} confirmed, "
+                       f"{len(ts['pending'])} pending")
+                subprocess.run(["git", "commit", "-m", msg], cwd=ROOT, check=True)
+                subprocess.run(["git", "push"], cwd=ROOT, check=True)
+                log(f"  pushed: {msg}")
+        except subprocess.CalledProcessError as e:
+            log(f"  git failed ({e}) — files are written; push by hand")
+    log("done")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--push", action="store_true")
     ap.add_argument("--no-site", action="store_true")
+    ap.add_argument("--timestamps-only", action="store_true",
+                    help="mature the OpenTimestamps proofs and nothing else")
     args = ap.parse_args()
+
+    if args.timestamps_only:
+        return timestamps_only(args)
 
     log("=" * 62)
     log(f"Besë publisher run  (dry-run={args.dry_run})")
@@ -248,6 +349,24 @@ def main() -> None:
     # 8 -------------------------------------------------------------------
     log("8. writing the data repository")
     BOOK_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Step 8 overwrites the published files; step 9 decides whether it was
+    # allowed to. That ordering meant an abort in step 9 left the record
+    # half-rewritten while printing "Nothing was written" -- the one promise
+    # this script makes about failure. Hold the previous bytes so the promise
+    # can be kept.
+    _pre = {}
+    for _tmpl in (*ARTEFACTS_TEMPLATES, "books/{book}/meta.json", "index.json"):
+        _rel = _tmpl.format(book=BOOK)
+        _p = REPO / _rel
+        if _p.exists():
+            _pre[_rel] = _p.read_bytes()
+
+    def restore_published() -> None:
+        """Put back exactly what was there before this run touched anything."""
+        for rel, raw in _pre.items():
+            (REPO / rel).write_bytes(raw)
+
     now = datetime.now(timezone.utc).isoformat()
 
     with open(BOOK_DIR / "nav.csv", "w", newline="", encoding="utf-8") as fh:
@@ -412,6 +531,7 @@ def main() -> None:
                            if k.endswith(("nav.csv", "metrics.json",
                                           "analytics.json"))]
                 if figures:
+                    restore_published()
                     die("published figures changed but no new session was "
                         "added — data for an already-chained session moved. "
                         "Resolve it with an override rather than letting the "
@@ -425,6 +545,7 @@ def main() -> None:
                 # edit is benign, because a reader cannot tell benign from
                 # otherwise without trusting the operator, and the record is
                 # built so they do not have to.
+                restore_published()
                 die("overrides.json changed, but no published figure moved and "
                     "no new session was added.\n"
                     "         Nothing is wrong: commit overrides.json now, and "
