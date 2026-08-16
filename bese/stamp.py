@@ -305,6 +305,36 @@ def stamp_new_snapshots(book_dir: Path) -> dict:
     return out
 
 
+def anchors(book_dir: Path) -> dict:
+    """{session_date: earliest Bitcoin block} for every snapshot with a proof.
+
+    Read here rather than in the site, because the site computes nothing: it
+    renders what the record says. Anchor status is also the one published fact
+    that legitimately changes without any data changing -- a proof matures from
+    pending to confirmed on Bitcoin's schedule, not the operator's -- which is
+    why it lives under `timestamping`, outside the meta digest.
+    """
+    if not _ots_lib():
+        return {}
+    from opentimestamps.core.notary import BitcoinBlockHeaderAttestation
+    from opentimestamps.core.serialize import StreamDeserializationContext
+    from opentimestamps.core.timestamp import DetachedTimestampFile
+
+    out = {}
+    for proof in sorted((book_dir / "snapshots").glob("*.json.ots")):
+        try:
+            with open(proof, "rb") as fd:
+                fts = DetachedTimestampFile.deserialize(
+                    StreamDeserializationContext(fd))
+            blocks = [a.height for _, a in fts.timestamp.all_attestations()
+                      if isinstance(a, BitcoinBlockHeaderAttestation)]
+        except Exception:                                       # noqa: BLE001
+            continue
+        if blocks:
+            out[proof.name.replace(".json.ots", "")] = min(blocks)
+    return out
+
+
 def archive_manifest(archive_dir: Path, out_path: Path) -> dict:
     """Commit to the raw exports without publishing them.
 

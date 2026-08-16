@@ -133,6 +133,44 @@ def rebase(nav):
     return [p["equity"] / base - 1 for p in nav]
 
 
+def chain_strip(chain, anchors, compact=False):
+    """The chain, drawn as one unbroken ribbon.
+
+    Everything else on this site is a convention borrowed from how track
+    records are normally presented. This is not: it depicts the thing that is
+    actually different here, which is that the record is a chain of immutable
+    session records, each one anchored into a Bitcoin block. A table of hashes
+    states that. A ribbon shows it, and shows the two properties a table hides
+    -- that there are no gaps, and how much of it is anchored rather than
+    merely claimed.
+
+    It scales the way the record does. Six sessions give six wide segments;
+    two hundred give two hundred narrow ones and the same unbroken bar, which
+    is the point. No segment carries a number: the table underneath is the
+    place for figures, and a label on every link would be unreadable by
+    session forty anyway.
+    """
+    if not chain:
+        return ""
+    segs = ""
+    for e in chain:
+        d = e["session_date"]
+        blk = (anchors or {}).get(d)
+        cls = "seg anchored" if blk else "seg"
+        title = (f"{d} \u00b7 anchored in Bitcoin block {blk}" if blk
+                 else f"{d} \u00b7 chained, awaiting confirmation")
+        segs += f'<span class="{cls}" title="{esc(title)}"></span>'
+    if compact:
+        return f'<div class="strip compact">{segs}</div>'
+    # Deliberately no count of how many are anchored. A reader who wants that
+    # number can read the proofs; printing it here would turn a visual into a
+    # claim, and a claim invites the reader to take it on trust.
+    ends = (f'<div class="strip-ends"><span>{esc(chain[0]["session_date"])}</span>'
+            f'<span>one segment per session, each hashed to the one before'
+            f'</span><span>{esc(chain[-1]["session_date"])}</span></div>')
+    return f'<div class="strip">{segs}</div>{ends}'
+
+
 # ----------------------------------------------------------------- charts ---
 
 def cumulative_chart(nav, cid="nav", w=W, pad_l=PAD_L, pad_r=PAD_R):
@@ -198,8 +236,12 @@ def returns_chart(daily, w=W, pad_l=PAD_L, pad_r=PAD_R):
     """Session returns.
 
     Colour carries the sign, and so does the signed label above every bar.
-    Measured, a conventional green/red pair separates by only dE 5.5 under deuteranopia,
-    so colour is never the only channel here.
+
+    The pair is measured, not chosen by eye. A conventional green/red separates
+    by only dE 5.5 under deuteranopia -- below the floor at which colour is
+    usable even as a secondary channel. The pair here is a deeper blue-green
+    against a deeper red, which measures dE 12.3, and it is still never the only
+    channel: every bar carries its signed value.
     """
     vals = [d["return"] for d in daily if d["return"] is not None]
     if not vals:
@@ -304,11 +346,11 @@ def distribution_chart(bins, w=W, pad_l=PAD_L, pad_r=PAD_R):
 CSS = """
 :root{color-scheme:light dark;
 --bg:#ffffff;--bg-subtle:#fafafa;--fg:#111318;--fg-muted:#5b6270;--fg-faint:#8b93a1;
---hairline:#ececf0;--up:#10814a;--down:#c0392f;--accent:#1b3a6b;--bench:#9aa3b2;
+--hairline:#ececf0;--up:#0d8b7d;--down:#b91c1c;--accent:#1b3a6b;--bench:#9aa3b2;
 --warn-bg:#f6f6f7;--warn-fg:#3f4450}
 @media(prefers-color-scheme:dark){:root{
 --bg:#0d0f12;--bg-subtle:#121519;--fg:#eef1f5;--fg-muted:#a2abba;--fg-faint:#6f7889;
---hairline:#23272e;--up:#3ddc97;--down:#ff7a6e;--accent:#9dc0f5;--bench:#616b7c;
+--hairline:#23272e;--up:#14b8a6;--down:#ff7a6e;--accent:#9dc0f5;--bench:#616b7c;
 --warn-bg:#16181c;--warn-fg:#c7cdd8}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);
@@ -362,6 +404,17 @@ line-height:1;font-variant-numeric:tabular-nums}
 .zero{stroke:var(--hairline);stroke-width:1}
 .line{fill:none;stroke:var(--accent);stroke-width:1.6;stroke-linejoin:round;
 stroke-linecap:round}
+/* The chain ribbon. One segment per session, a 2px surface gap between them so
+   the links read as separate without a border on each. Anchored segments carry
+   the accent; unanchored ones sit back at hairline weight -- the difference
+   between proven and merely claimed, shown rather than captioned. */
+.strip{display:flex;gap:2px;margin:0 0 9px;height:26px}
+.strip .seg{flex:1 1 0;min-width:2px;background:var(--hairline);border-radius:1px}
+.strip .seg.anchored{background:var(--accent)}
+.strip.compact{height:8px;margin:14px 0 0}
+.strip-ends{display:flex;justify-content:space-between;gap:12px;margin:0 0 20px;
+font-size:11px;color:var(--fg-faint);font-variant-numeric:tabular-nums}
+.strip-ends span:nth-child(2){color:var(--fg-muted)}
 .mark{fill:var(--accent)}
 .focus{fill:var(--accent)}
 .cross{stroke:var(--hairline);stroke-width:1}
@@ -434,6 +487,11 @@ font-size:12.5px;line-height:1.6;margin:18px 0 0}
      The value it carries is already in the tables below. */
   .hit{display:none}
   .tip{display:none}
+  .strip{height:22px}
+  /* Three columns of date/count/date will not fit; stack the count under the
+     dates rather than shrinking type below legibility. */
+  .strip-ends{flex-wrap:wrap;row-gap:3px}
+  .strip-ends span:nth-child(2){order:3;flex-basis:100%;text-align:center}
   .kpi .v{font-size:23px}
   h1{font-size:29px}
   pre{font-size:11px;padding:11px 12px}
@@ -547,7 +605,7 @@ def read_trades(book_dir: Path):
 
 # ------------------------------------------------------------------ pages ---
 
-def landing(idx, meta, metrics, nav):
+def landing(idx, meta, metrics, nav, chain=None):
     v = metrics["values"]
     kpis = ('<div class="kpis">'
             + kpi("Cumulative return", spct(v["cumulative_return"], 3),
@@ -559,7 +617,9 @@ def landing(idx, meta, metrics, nav):
                   f'{esc(meta["trades"])} strategy trades')
             + kpi("Chained records", esc(idx["chain"]["entries"]),
                   "each hashed to the one before")
-            + "</div>")
+            + "</div>"
+            + chain_strip(chain, (meta.get("timestamping") or {}).get("anchors"),
+                          compact=True))
 
     chart = (dual(cumulative_chart, nav, cid="nav")
              + '<p class="notice">Cumulative return since inception. Exposure is '
@@ -922,7 +982,8 @@ forecloses &#8220;you edited the source&#8221;.</p></div>''',
      note="Fixed in time, without being published.")}
 
 {sec("The chain",
-     f'<table><thead><tr><th>Session</th><th>Hash</th><th>Previous</th>'
+     chain_strip(chain, (meta.get("timestamping") or {}).get("anchors"))
+     + f'<table><thead><tr><th>Session</th><th>Hash</th><th>Previous</th>'
      f'<th>Bytes on disk</th></tr></thead><tbody>{rows}</tbody></table>',
      note=f'{esc(idx["chain"]["entries"])} records. Head '
           f'<span class="mono">{esc((meta.get("chain_head") or "—")[:20])}…</span>')}
@@ -1131,7 +1192,7 @@ def build(repo: Path, out: Path) -> list[Path]:
 
     written = []
     for name, body in [
-        ("index.html", landing(idx, meta, metrics, nav)),
+        ("index.html", landing(idx, meta, metrics, nav, chain)),
         ("portfolio.html", portfolio(meta, metrics, analytics, nav, trades)),
         ("verify.html", verify_page(idx, meta, chain)),
         ("methodology.html", methodology_page(meta, metrics)),

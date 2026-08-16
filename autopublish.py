@@ -155,6 +155,7 @@ def timestamps_only(args) -> None:
         "pending": len(ts["pending"]),
         "available": ts["client"] is not None,
         "note": ts.get("note"),
+        "anchors": ots.anchors(BOOK_DIR),
         "proves": (("each record existed at or before the anchoring block; "
                     "combined with the chain, the series can be neither "
                     "back-dated nor silently shortened")
@@ -581,6 +582,7 @@ def main() -> None:
         "pending": len(ts["pending"]),
         "available": ts["client"] is not None,
         "note": ts.get("note"),
+        "anchors": ots.anchors(BOOK_DIR),
         # Stated conditionally, because it was previously asserted flat next
         # to "available": false -- claiming a property of an artefact that did
         # not have it.
