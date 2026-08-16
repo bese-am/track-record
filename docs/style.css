@@ -65,6 +65,11 @@ stroke-linecap:round}
 .strip{display:flex;gap:2px;margin:0 0 9px;height:26px}
 .strip .seg{flex:1 1 0;min-width:2px;background:var(--hairline);border-radius:1px}
 .strip .seg.anchored{background:var(--accent)}
+/* The hover target is the segment itself, so it has to say so. An outline
+   rather than a colour change: colour on this ribbon means anchored, and
+   nothing else is allowed to borrow it. */
+.strip .seg{cursor:crosshair}
+.strip .seg:hover{outline:2px solid var(--fg);outline-offset:1px}
 .strip.compact{height:8px;margin:14px 0 0}
 .strip-ends{display:flex;justify-content:space-between;gap:12px;margin:0 0 20px;
 font-size:11px;color:var(--fg-faint);font-variant-numeric:tabular-nums}
@@ -166,3 +171,8 @@ background:var(--bg);border:1px solid var(--hairline);padding:8px 11px;
 font-size:12px;z-index:9}
 .tip b{display:block;font-size:10.5px;color:var(--fg-faint);font-weight:400;
 margin-bottom:3px}
+/* A SHA-256 is 64 characters. Broken anywhere, in a monospace face, so it can
+   be read off the screen and compared against the table character by
+   character -- which is the only reason it is here. */
+.tip .h{display:block;max-width:34ch;font-size:11px;line-height:1.5;
+font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}

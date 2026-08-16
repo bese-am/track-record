@@ -14,3 +14,17 @@ document.querySelectorAll('.hit').forEach(el=>{
  el.addEventListener('mouseleave',()=>{tip.style.opacity='0';
   document.querySelectorAll('.cross,.focus').forEach(n=>n.style.display='none');});
 });
+const place=(e)=>{const tw=tip.offsetWidth||230;
+ tip.style.left=Math.max(8,Math.min(e.clientX+14,innerWidth-tw-8))+'px';
+ tip.style.top=(e.clientY-12)+'px';};
+document.querySelectorAll('.strip .seg').forEach(el=>{
+ el.removeAttribute('title');
+ el.addEventListener('mouseenter',e=>{
+  tip.replaceChildren(
+   Object.assign(document.createElement('b'),{textContent:el.dataset.title}),
+   Object.assign(document.createElement('span'),
+    {className:'h',textContent:el.dataset.hash}));
+  place(e);tip.style.opacity='1';});
+ el.addEventListener('mousemove',place);
+ el.addEventListener('mouseleave',()=>{tip.style.opacity='0';});
+});
