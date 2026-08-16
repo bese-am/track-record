@@ -1,6 +1,6 @@
 # Besë Asset Management — track record
 
-A public, verifiable record of a futures trading strategy, normalised to
+A public, verifiable record of beseam.net futures trading strategy, normalised to
 1 NQ-equivalent of exposure against a stated $100,000 nominal base.
 
 **This repository exists so the record can be checked without trusting anyone.**
